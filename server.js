@@ -22,9 +22,9 @@ http.createServer(function(request, response) {
      });
     }
     else {
-      res.writeHead(404, {'Content-Type': 'text/html'});
-      res.write('not found : ' + req.url);
-      res.end();
+      response.writeHead(404, {'Content-Type': 'text/html'});
+      response.write('not found : ' + request.url);
+      response.end();
     }
 
 }).listen(port);
