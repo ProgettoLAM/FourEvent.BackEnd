@@ -1,14 +1,27 @@
 var Hapi = require('hapi');
 var server = new Hapi.Server();
 
-var quotes = [
+var users =
+[
   {
-    author: 'Audrey Hepburn'
-  , text: 'Nothing is impossible, the word itself says \'I\'m possible\'!'
+    name : 'Gianmarco Spinaci',
+    email : 'spino9330@gmail.com'
+  },
+  {
+    name : 'Valentina Tosto',
+    email : '94tinat@gmail.com'
   }
-, {
-    author: 'Walt Disney'
-  , text: 'You may not realize it when it happens, but a kick in the teeth may be the best thing in the world for you'
+]
+
+var quotes =
+[
+  {
+    author: 'Audrey Hepburn',
+    text: 'Nothing is impossible, the word itself says \'I\'m possible\'!'
+  },
+  {
+    author: 'Walt Disney',
+    text: 'You may not realize it when it happens, but a kick in the teeth may be the best thing in the world for you'
   }
 , {
     author: 'Unknown'
@@ -25,6 +38,24 @@ var quotes = [
 server.connection({
     host: 'localhost',
     port: Number(process.argv[2] || 8080)
+});
+
+server.route({
+    method: 'GET',
+    path: '/user',
+    handler: function (request, reply) {
+        reply(users);
+    }
+});
+
+server.route({
+    method: 'GET',
+    path: '/user/{email}',
+    handler: function (request, reply) {
+
+
+        reply(users.find({'username':req.params.email}));
+    }
 });
 
 server.route({
