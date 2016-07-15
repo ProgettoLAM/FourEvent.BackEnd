@@ -1,0 +1,26 @@
+{
+  "name": "fourevent.backend",
+  "version": "1.0.0",
+  "description": "Backend progetto LAM",
+  "main": "server.js",
+  "scripts": {
+    "test": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ProgettoLAM/FourEvent.BackEnd.git"
+  },
+  "keywords": [
+    "LAM",
+    "mean"
+  ],
+  "author": "fourevent",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/ProgettoLAM/FourEvent.BackEnd/issues"
+  },
+  "homepage": "https://github.com/ProgettoLAM/FourEvent.BackEnd#readme",
+  "dependencies": {
+    "express": "^4.14.0"
+  }
+}
