@@ -21,6 +21,7 @@
   },
   "homepage": "https://github.com/ProgettoLAM/FourEvent.BackEnd#readme",
   "dependencies": {
+    "assert": "^1.4.1",
     "body-parser": "^1.15.2",
     "express": "^4.13.4",
     "jsonwebtoken": "^7.0.0",

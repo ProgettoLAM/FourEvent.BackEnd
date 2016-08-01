@@ -2,6 +2,7 @@ var express = require('express');
 var fs = require('fs');
 var app = express();
 var ms = require('ms');
+var assert = require('assert');
 
 var bodyParser  = require('body-parser');
 var morgan      = require('morgan');
@@ -16,7 +17,9 @@ var jwt    = require('jsonwebtoken');
 var config = require('./config');
 
 //porta settata
-var port = process.env.PORT || 3000;
+var port = process.env.PORT || 8080;
+
+var url = 'http://localhost:'+port;
 
 //connessione al database e set della passphrase
 //mongoose.connect(config.database);
@@ -40,14 +43,42 @@ apiRoutes.get('/events', function(req, res) {
     res.json({
         'events':[
             {
-                'text':"Complix vale",
-                'date':'16/04/2017'
+                'title':"Comply ValeXS",
+                'address':'Via Adda 8',
+                'date':'16/04/2017',
+                'tag':'#complix'
             },
             {
-                'text':"Buongiorno mondo",
-                'date':'1/1/2017'
+                'title':"Comply ValeXS",
+                'address':'Via Adda 8',
+                'date':'16/04/2017',
+                'tag':'#complix'
             },
         ]
+    });
+});
+
+apiRoutes.put('/user',function(req, res) {
+
+    MongoClient.connect(config.database, function(err, db) {
+
+        if(err) return res.send(err);
+
+        var user = {
+            '_id' : req.body.email,
+            'password' : req.body.password
+        };
+
+        console.log(user);
+
+        db.collection('users').insertOne(user,function(err, result) {
+
+            if(err) return res.send(err);
+
+            res.send(result);
+
+            db.close();
+        });
     });
 });
 
@@ -59,5 +90,5 @@ app.use('/api', apiRoutes);
  *
  */
 app.listen(port, function () {
-  	console.log('Example app listening on http://localhost:'+port);
+  	console.log('FourEvent.Backend in listening on ' + url);
 });
