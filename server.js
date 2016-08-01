@@ -58,6 +58,23 @@ apiRoutes.get('/events', function(req, res) {
     });
 });
 
+apiRoutes.get('/user',function(req,res){
+
+    MongoClient.connect(config.database, function(err, db) {
+
+        if(err) return res.send(err);
+
+        db.collection('users').find(function(err, result) {
+
+            if(err) return res.send(err);
+
+            res.send(result);
+
+            db.close();
+        });
+    });
+});
+
 apiRoutes.put('/user',function(req, res) {
 
     MongoClient.connect(config.database, function(err, db) {
