@@ -64,9 +64,11 @@ apiRoutes.get('/user',function(req,res){
 
         if(err) return res.send(err);
 
-        db.collection('users').find(function(err, result) {
+        db.collection('users').find().toArray(function(err, result) {
 
             if(err) return res.send(err);
+
+            console.log(result);
 
             res.send(result);
 
