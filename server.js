@@ -78,46 +78,53 @@ apiRoutes.get('/user',function(req,res){
     });
 });
 
-apiRoutes.get('/user/:email',function(req,res){
+apiRoutes.post('/user',function(req,res){
 
-    var email = req.params.email;
+    if(req.body.email && req.body.password){
 
-    MongoClient.connect(config.database, function(err, db) {
-
-        if(err){
-
-            console.log(JSON.stringify(err.message).red);
-            return res.status(503).send(err);
-        }
-
-        var cond = {
-            '_id' : email
-        };
-
-        console.log('found = ' + JSON.stringify(cond).green);
-
-        db.collection('users').findOne(cond, function(err, result) {
+        MongoClient.connect(config.database, function(err, db) {
 
             if(err){
+
                 console.log(JSON.stringify(err.message).red);
-                return res.status(406).send(err);
+                return res.status(503).send(err);
             }
 
-            if(result){
+            var cond = {
+                '_id' : req.body.email,
+                'password' : req.body.password
+            };
 
-                console.log(JSON.stringify(result).green);
-                res.send(result);
-            }else{
+            console.log('found = ' + JSON.stringify(cond).green);
 
-                var error = {'name':'User not found','message':'Error, user not found in database'};
-                console.log(JSON.stringify(error).red);
+            db.collection('users').findOne(cond, function(err, result) {
 
-                res.status(404).send(error);
-            }
+                if(err){
+                    console.log(JSON.stringify(err.message).red);
+                    return res.status(406).send(err);
+                }
 
-            db.close();
+                if(result){
+
+                    console.log(JSON.stringify(result).green);
+                    res.send(result);
+                }else{
+
+                    var error = {'name':'User not found','message':'Error, user not found in database'};
+                    console.log(JSON.stringify(error).red);
+
+                    res.status(404).send(error);
+                }
+
+                db.close();
+            });
         });
-    });
+    }else {
+        var err = {'name':'User not found','message':'Error, user not found in headers'};
+
+        console.log(JSON.stringify(err.message).red);
+        return res.status(406).send(err);
+    }
 });
 
 apiRoutes.put('/user',function(req, res) {
