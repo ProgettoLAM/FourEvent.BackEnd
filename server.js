@@ -3,6 +3,7 @@ var fs = require('fs');
 var app = express();
 var ms = require('ms');
 var assert = require('assert');
+var colors = require('colors');
 
 var bodyParser  = require('body-parser');
 var morgan      = require('morgan');
@@ -77,28 +78,91 @@ apiRoutes.get('/user',function(req,res){
     });
 });
 
-apiRoutes.put('/user',function(req, res) {
+apiRoutes.get('/user/:email',function(req,res){
+
+    var email = req.params.email;
 
     MongoClient.connect(config.database, function(err, db) {
 
-        if(err) return res.send(err);
+        if(err){
 
-        var user = {
-            '_id' : req.body.email,
-            'password' : req.body.password
+            console.log(JSON.stringify(err.message).red);
+            return res.status(503).send(err);
+        }
+
+        var cond = {
+            '_id' : email
         };
 
-        console.log(user);
+        console.log('found = ' + JSON.stringify(cond).green);
 
-        db.collection('users').insertOne(user,function(err, result) {
+        db.collection('users').findOne(cond, function(err, result) {
 
-            if(err) return res.send(err);
+            if(err){
+                console.log(JSON.stringify(err.message).red);
+                return res.status(406).send(err);
+            }
 
-            res.send(result);
+            if(result){
+
+                console.log(JSON.stringify(result).green);
+                res.send(result);
+            }else{
+
+                var error = {'name':'User not found','message':'Error, user not found in database'};
+                console.log(JSON.stringify(error).red);
+
+                res.status(404).send(error);
+            }
 
             db.close();
         });
     });
+});
+
+apiRoutes.put('/user',function(req, res) {
+
+    if(req.body.email && req.body.password){
+
+        MongoClient.connect(config.database, function(err, db) {
+
+            if(err){
+
+                console.log(JSON.stringify(err.message).red);
+                return res.status(503).send(err);
+            }
+
+            var user = {
+                '_id' : req.body.email,
+                'password' : req.body.password
+            };
+
+            console.log('found = ' + JSON.stringify(user).green);
+
+            db.collection('users').insertOne(user,function(err, result) {
+
+                if(err){
+                    console.log(JSON.stringify(err.message).red);
+                    return res.status(406).send(err);
+                }
+
+                result = {
+                    'name':'ok',
+                    'message':'Inserimento completato con successo'
+                };
+
+                console.log(JSON.strigify(result).green);
+                res.send(result);
+
+                db.close();
+            });
+        });
+    }else {
+        var err = {'name':'User not found','message':'Error, user not found in headers'};
+
+        console.log(JSON.stringify(err.message).red);
+        return res.status(406).send(err);
+    }
 });
 
 app.use('/api', apiRoutes);
