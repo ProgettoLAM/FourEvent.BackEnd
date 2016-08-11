@@ -41,21 +41,35 @@ var apiRoutes = express.Router();
 
 apiRoutes.get('/events', function(req, res) {
 
-    res.json({
-        'events':[
-            {
-                'title':"Comply ValeXS",
-                'address':'Via Adda 8',
-                'date':'16/04/2017',
-                'tag':'#complix'
-            },
-            {
-                'title':"Comply ValeXS",
-                'address':'Via Adda 8',
-                'date':'16/04/2017',
-                'tag':'#complix'
-            },
-        ]
+    MongoClient.connect(config.database, function(err, db) {
+
+        if(err){
+
+            console.log(JSON.stringify(err.message).red);
+            return res.status(503).send(err);
+        }
+
+        db.collection('events').find().toArray(function(err, result) {
+
+            if(err){
+                console.log(JSON.stringify(err.message).red);
+                return res.status(406).send(err);
+            }
+
+            if(result.length === 0){
+
+                console.log(JSON.stringify(result).green);
+                res.send(result);
+            }else{
+
+                var error = {'name':'Events not found','message':'Error, events not found in database'};
+                console.log(JSON.stringify(error).red);
+
+                res.status(404).send(error);
+            }
+
+            db.close();
+        });
     });
 });
 
@@ -158,7 +172,7 @@ apiRoutes.put('/user',function(req, res) {
                     'message':'Inserimento completato con successo'
                 };
 
-                console.log(JSON.strigify(result).green);
+                console.log(JSON.stringify(result).green);
                 res.send(result);
 
                 db.close();
