@@ -20,7 +20,7 @@ var config = require('./config');
 //porta settata
 var port = process.env.PORT || 8080;
 
-var url = 'http://localhost:'+port;
+var url = config.url+port;
 
 //connessione al database e set della passphrase
 //mongoose.connect(config.database);
@@ -58,14 +58,15 @@ apiRoutes.get('/events', function(req, res) {
 
             if(result.length === 0){
 
-                console.log(JSON.stringify(result).green);
-                res.send(result);
-            }else{
-
                 var error = {'name':'Events not found','message':'Error, events not found in database'};
                 console.log(JSON.stringify(error).red);
 
-                res.status(404).send(error);
+
+                res.status(404).send(result);
+            }else{
+
+                console.log(JSON.stringify(result).green);
+                res.send(result);
             }
 
             db.close();
