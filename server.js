@@ -19,8 +19,9 @@ var config = require('./config');
 
 //porta settata
 var port = process.env.PORT || 8080;
+var url = process.env.URI || config.url;
 
-var url = config.url+port;
+url += port;
 
 //connessione al database e set della passphrase
 //mongoose.connect(config.database);
@@ -136,6 +137,69 @@ apiRoutes.post('/user',function(req,res){
         });
     }else {
         var err = {'name':'User not found','message':'Error, user not found in headers'};
+
+        console.log(JSON.stringify(err.message).red);
+        return res.status(406).send(err);
+    }
+});
+
+apiRoutes.post('/user/:email',function(req, res) {
+
+    //TODO controllare se esiste un body
+    //TODO controllare se esiste l'email
+    //TODO eseguire l'update della riga nel db
+
+    var body = req.body;
+
+    if(body.name || body.location || body.gender || body.birthDate){
+
+        MongoClient.connect(config.database, function(err, db) {
+
+            if(err){
+
+                console.log(JSON.stringify(err.message).red);
+                return res.status(503).send(err);
+            }
+
+            var element = {};
+
+            if(body.name) element.name = body.name;
+
+            if(body.location) element.location = body.location;
+
+            if(body.gender) element.gender = body.gender;
+
+            if(body.birthDate) element.birthDate = body.birthDate;
+
+            var cond = {'_id':req.params.email};
+
+            console.log(element);
+            console.log(cond);
+
+            db.collection('users').updateOne(cond,
+                {
+                    '$set': element
+                },
+                function(err,result){
+
+                    if(err){
+                        console.log(JSON.stringify(err.message).red);
+                        return res.status(406).send(err);
+                    }
+
+                    result = {
+                        'name':'ok',
+                        'message':result
+                    };
+
+                    console.log(JSON.stringify(result).green);
+                    res.send(result);
+
+                    db.close();
+                });
+        });
+    }else {
+        var err = {'name':'Parameters not found','message':'Error, parameters not found in body'};
 
         console.log(JSON.stringify(err.message).red);
         return res.status(406).send(err);
