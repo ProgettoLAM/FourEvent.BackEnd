@@ -5,6 +5,7 @@ var ms = require('ms');
 var assert = require('assert');
 var colors = require('colors');
 var sha256 = require('sha256');
+var geocoder = require('geocoder');
 
 var bodyParser  = require('body-parser');
 var morgan      = require('morgan');
@@ -41,7 +42,7 @@ app.use(morgan('dev'));
  */
 var apiRoutes = express.Router();
 
-apiRoutes.get('/events', function(req, res) {
+apiRoutes.get('/event', function(req, res) {
 
     MongoClient.connect(config.database, function(err, db) {
 
@@ -75,6 +76,23 @@ apiRoutes.get('/events', function(req, res) {
         });
     });
 });
+
+apiRoutes.put('/event', function(req, res) {
+
+    //get coordinate from address
+    geocoder.geocode(req.body.address, function ( err, data ) {
+
+        if(err) res.send(err);
+
+        var result = {
+            address : data.results[0].formatted_address,
+            coordinates : data.results[0].geometry.location
+        };
+
+        res.send(result);
+    });
+});
+
 
 apiRoutes.get('/user',function(req,res){
 
