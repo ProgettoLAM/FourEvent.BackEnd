@@ -4,6 +4,7 @@ var app = express();
 var ms = require('ms');
 var assert = require('assert');
 var colors = require('colors');
+var sha256 = require('sha256');
 
 var bodyParser  = require('body-parser');
 var morgan      = require('morgan');
@@ -108,7 +109,7 @@ apiRoutes.post('/user',function(req,res){
 
             var cond = {
                 '_id' : req.body.email,
-                'password' : req.body.password
+                'password' : sha256(req.body.password)
             };
 
             console.log('found = ' + JSON.stringify(cond).green);
@@ -220,7 +221,7 @@ apiRoutes.put('/user',function(req, res) {
 
             var user = {
                 '_id' : req.body.email,
-                'password' : req.body.password
+                'password' : sha256(req.body.password)
             };
 
             console.log('found = ' + JSON.stringify(user).green);
