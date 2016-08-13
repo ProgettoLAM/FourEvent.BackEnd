@@ -152,59 +152,53 @@ apiRoutes.post('/user/:email',function(req, res) {
 
     var body = req.body;
 
-    if(body.name || body.location || body.gender || body.birthDate){
+    MongoClient.connect(config.database, function(err, db) {
 
-        MongoClient.connect(config.database, function(err, db) {
+        if(err){
 
-            if(err){
+            console.log(JSON.stringify(err.message).red);
+            return res.status(503).send(err);
+        }
 
-                console.log(JSON.stringify(err.message).red);
-                return res.status(503).send(err);
-            }
+        var element = {};
 
-            var element = {};
+        if(body.name) element.name = body.name;
 
-            if(body.name) element.name = body.name;
+        if(body.location) element.location = body.location;
 
-            if(body.location) element.location = body.location;
+        if(body.gender) element.gender = body.gender;
 
-            if(body.gender) element.gender = body.gender;
+        if(body.birthDate) element.birthDate = body.birthDate;
 
-            if(body.birthDate) element.birthDate = body.birthDate;
+        if(body.categories) element.categories = body.categories;
 
-            var cond = {'_id':req.params.email};
+        var cond = {'_id':req.params.email};
 
-            console.log(element);
-            console.log(cond);
+        console.log(element);
+        console.log(cond);
 
-            db.collection('users').updateOne(cond,
-                {
-                    '$set': element
-                },
-                function(err,result){
+        db.collection('users').updateOne(cond,
+            {
+                '$set': element
+            },
+            function(err,result){
 
-                    if(err){
-                        console.log(JSON.stringify(err.message).red);
-                        return res.status(406).send(err);
-                    }
+                if(err){
+                    console.log(JSON.stringify(err.message).red);
+                    return res.status(406).send(err);
+                }
 
-                    result = {
-                        'name':'ok',
-                        'message':result
-                    };
+                result = {
+                    'name':'ok',
+                    'message':result
+                };
 
-                    console.log(JSON.stringify(result).green);
-                    res.send(result);
+                console.log(JSON.stringify(result).green);
+                res.send(result);
 
-                    db.close();
-                });
-        });
-    }else {
-        var err = {'name':'Parameters not found','message':'Error, parameters not found in body'};
-
-        console.log(JSON.stringify(err.message).red);
-        return res.status(406).send(err);
-    }
+                db.close();
+            });
+    });
 });
 
 apiRoutes.put('/user',function(req, res) {
