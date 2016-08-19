@@ -1,26 +1,16 @@
 [
     {
-        "title" : "Sagra della porchetta",
-        "date" : "15/08/16 10:30",
-        "tag" : "3",
-        "address" : "Via della patacca 15, Sasso Marconi, BO",
-        "latitude" : -1,
-        "longitude" : -1
-    },
-    {
-        "title" : "Google IO",
-        "date" : "15/08/16 10:30",
-        "tag" : "7",
-        "address" : "Via della strada 105/b, Cagliari, CA",
-        "latitude" : -1,
-        "longitude" : -1
-    },
-    {
-        "title" : "Salto della corda da 20 mt",
-        "date" : "15/08/16 10:30",
-        "tag" : "6",
-        "address" : "Via della corda 15, Cinisello Balsamo, MI",
-        "latitude" : -1,
-        "longitude" : -1
+       	"title" : "Viva la porchetta",
+       	"tag" : "Sagra",
+       	"address" : "Montesilvano",
+       	"latitude" : 42.5102079,
+       	"longitude" : 14.1436996,
+       	"price" : 5,
+       	"description" : "Tutti a mangiare",
+       	"participation" : 0,
+       	"endDate" : "15/08 - 24:00",
+       	"image" : "url",
+       	"startDate" : "15/08 - 20:00",
+       	"date" : "15/08"
     }
 ]

@@ -77,6 +77,13 @@ apiRoutes.get('/event', function(req, res) {
     });
 });
 
+apiRoutes.get('/event/img/:image',function(req, res) {
+
+    img = req.params.image;
+    console.log(img);
+    res.sendFile(__dirname+'/data/img/'+img);
+});
+
 apiRoutes.put('/event', function(req, res) {
 
     //get coordinate from address
@@ -89,10 +96,9 @@ apiRoutes.put('/event', function(req, res) {
             coordinates : data.results[0].geometry.location
         };
 
-        res.send(result);
+        res.send(data);
     });
 });
-
 
 apiRoutes.get('/user',function(req,res){
 
@@ -108,6 +114,32 @@ apiRoutes.get('/user',function(req,res){
 
             res.send(result);
 
+            db.close();
+        });
+    });
+});
+
+apiRoutes.get('/user/:email',function(req,res){
+
+    MongoClient.connect(config.database, function(err, db) {
+
+        if(err) return res.send(err);
+
+        db.collection('users').find({'_id':req.params.email}).toArray(function(err, result) {
+
+            if(err) return res.send(err);
+
+            console.log(result);
+
+            if(result.length <= 0) {
+
+                res.status(404).send("Error, specific user not found");
+
+            } else {
+
+                res.send(result);
+            }
+            
             db.close();
         });
     });
@@ -217,6 +249,59 @@ apiRoutes.post('/user/:email',function(req, res) {
                 db.close();
             });
     });
+});
+
+apiRoutes.post('/user/changepassword/:email', function(req, res) {
+
+    var body = req.body;
+
+    console.log(body);
+
+    var newPass = sha256(body.newPassword);
+    var oldPass = sha256(body.oldPassword);
+
+    if(newPass && oldPass && (newPass != oldPass)) {
+
+        MongoClient.connect(config.database, function(err, db) {
+
+            if(err){
+
+                console.log(JSON.stringify(err.message).red);
+                return res.status(503).send(err);
+            }
+
+            var cond = {
+                '_id':req.params.email,
+                'password': oldPass
+            };
+
+            db.collection('users').updateOne(cond,
+                {
+                    '$set': {'password': newPass}
+                },
+                function(err,result){
+
+                    if(err){
+                        console.log(JSON.stringify(err.message).red);
+                        return res.status(406).send(err);
+                    }
+
+                    result = {
+                        'name':'ok',
+                        'message':result
+                    };
+
+                    console.log(JSON.stringify(result).green);
+                    res.send(result);
+
+                    db.close();
+                });
+        });
+    } else {
+
+        console.log('Error, password not found'.red);
+        return res.status(503).send(err);
+    }
 });
 
 apiRoutes.put('/user',function(req, res) {
