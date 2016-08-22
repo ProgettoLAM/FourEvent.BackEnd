@@ -61,11 +61,11 @@ apiRoutes.get('/event', function(req, res) {
 
             if(result.length === 0){
 
-                var error = {'name':'Events not found','message':'Error, events not found in database'};
+                var error = {'name':'Events not found','message':'Eventi non trovati'};
                 console.log(JSON.stringify(error).red);
 
 
-                res.status(404).send(result);
+                res.status(404).send(error);
             }else{
 
                 console.log(JSON.stringify(result).green);
@@ -137,9 +137,9 @@ apiRoutes.get('/user/:email',function(req,res){
 
             } else {
 
-                res.send(result);
+                res.send(result[0]);
             }
-            
+
             db.close();
         });
     });
@@ -347,6 +347,274 @@ apiRoutes.put('/user',function(req, res) {
         console.log(JSON.stringify(err.message).red);
         return res.status(406).send(err);
     }
+});
+
+/* ---------------------------------------- */
+
+apiRoutes.put('/record/:email', function(req,res) {
+
+    MongoClient.connect(config.database, function(err, db) {
+
+        if(err){
+
+            console.log(JSON.stringify(err.message).red);
+            return res.status(503).send(err);
+        }
+
+        var date = new Date().getTime();
+
+        console.log(date);
+
+        var record = {
+            'date' : date,
+            'amount' : req.body.amount,
+            'type' : req.body.type,
+            'user' : req.params.email
+        };
+
+        if(req.body.event) {
+
+            record.event = req.body.event;
+        }
+
+        console.log((record).green);
+
+        db.collection('records').insertOne(record,function(err, result) {
+
+            if(err){
+                console.log(JSON.stringify(err.message).red);
+                return res.status(406).send(err);
+            }
+
+            db.collection('users').updateOne(
+                {'_id':record.user},
+                {'$inc':{'balance':parseFloat(record.amount)}},
+                function(err,result) {
+
+                    if(err){
+                        console.log(JSON.stringify(err.message).red);
+                        return res.status(406).send(err);
+                    }
+
+                    result = {
+                        'name':'ok',
+                        'message':'Inserimento e aggiornamento saldo completato con successo'
+                    };
+
+                    console.log((result).green);
+                    res.send(result);
+
+                    db.close();
+                }
+            );
+        });
+    });
+});
+
+apiRoutes.get('/record/:email', function(req,res) {
+
+    MongoClient.connect(config.database, function(err, db) {
+
+        if(err){
+            console.log(JSON.stringify(err.message).red);
+            return res.status(406).send(err);
+        }
+
+        db.collection('records').find({'user':req.params.email}).toArray(function(err,result) {
+
+                if(err){
+                    console.log(JSON.stringify(err.message).red);
+                    return res.status(406).send(err);
+                }
+
+                console.log((result).green);
+                res.send(result);
+
+                db.close();
+            }
+        );
+    });
+});
+/* ---------------------------------------- */
+
+//TODO crea planner account
+
+apiRoutes.put('/planner/register', function(req,res) {
+
+    if(req.body.email && req.body.password){
+
+        MongoClient.connect(config.database, function(err, db) {
+
+            if(err){
+
+                console.log(JSON.stringify(err.message).red);
+                return res.status(503).send(err);
+            }
+
+            var planner = {
+                '_id' : req.body.email,
+                'password' : sha256(req.body.password),
+                'events' : []
+            };
+
+            console.log('found = ' + JSON.stringify(planner).green);
+
+            db.collection('planners').insertOne(planner,function(err, result) {
+
+                if(err){
+                    console.log(JSON.stringify(err.message).red);
+                    return res.status(406).send(err);
+                }
+
+                result = {
+                    'name':'ok',
+                    'message':'Inserimento completato con successo'
+                };
+
+                console.log(JSON.stringify(result).green);
+                res.send(result);
+
+                db.close();
+            });
+        });
+    }else {
+        var err = {'name':'Planner not found','message':'Error, planner not found in body'};
+
+        console.log(JSON.stringify(err.message).red);
+        return res.status(406).send(err);
+    }
+});
+
+apiRoutes.post('/planner/authenticate',function(req,res) {
+
+    if(req.body.email && req.body.password){
+
+        MongoClient.connect(config.database, function(err, db) {
+
+            if(err){
+
+                console.log(JSON.stringify(err.message).red);
+                return res.status(503).send(err);
+            }
+
+            var cond = {
+                '_id' : req.body.email,
+                'password' : sha256(req.body.password)
+            };
+
+            console.log('found = ' + JSON.stringify(cond).green);
+
+            db.collection('planners').findOne(cond, function(err, result) {
+
+                if(err){
+                    console.log(JSON.stringify(err.message).red);
+                    return res.status(406).send(err);
+                }
+
+                if(result){
+
+                    console.log(JSON.stringify(result).green);
+                    res.send(result);
+                }else{
+
+                    var error = {'name':'Planner not found','message':'Error, planner not found in database'};
+                    console.log(JSON.stringify(error).red);
+
+                    res.status(404).send(error);
+                }
+
+                db.close();
+            });
+        });
+    }else {
+        var err = {'name':'Planner not found','message':'Error, planner not found in headers'};
+
+        console.log(JSON.stringify(err.message).red);
+        return res.status(406).send(err);
+    }
+});
+
+apiRoutes.get('/planner/:email', function(req,res) {
+
+    MongoClient.connect(config.database, function(err, db) {
+
+        if(err) return res.send(err);
+
+        db.collection('planners').find({'_id':req.params.email}).toArray(function(err, result) {
+
+            if(err) return res.send(err);
+
+            console.log(result);
+
+            if(result.length <= 0) {
+
+                res.status(404).send({"message":"Error, specific planner not found"});
+
+            } else {
+
+                res.send(result[0]);
+            }
+
+            db.close();
+        });
+    });
+});
+
+apiRoutes.put('/planner/:email/event', function(req,res) {
+
+    MongoClient.connect(config.database, function(err, db) {
+
+        if(err){
+
+            console.log(JSON.stringify(err.message).red);
+            return res.status(503).send(err);
+        }
+
+        var cond = {
+            '_id':req.params.email,
+        };
+
+        db.collection('planners').updateOne(cond,
+            {
+                '$push': {'events': req.body}
+            },
+            function(err,result){
+
+                if(err){
+                    console.log(JSON.stringify(err.message).red);
+                    return res.status(406).send(err);
+                }
+
+                result = {
+                    'name':'ok',
+                    'message':result
+                };
+
+                console.log(JSON.stringify(result).green);
+                res.send(result);
+
+                db.close();
+            });
+    });
+});
+
+apiRoutes.delete('/planner/:email', function(req,res) {
+
+    MongoClient.connect(config.database, function(err, db) {
+
+        if(err) return res.send(err);
+
+        db.collection('planners').deleteOne({'_id':req.params.email},function(err, result) {
+
+            if(err) return res.send(err);
+
+            console.log(result);
+
+            res.send(result);
+
+            db.close();
+        });
+    });
 });
 
 app.use('/api', apiRoutes);

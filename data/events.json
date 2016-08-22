@@ -12,5 +12,19 @@
        	"image" : "url",
        	"startDate" : "15/08 - 20:00",
        	"date" : "15/08"
+    },
+    {
+       	"title" : "Cacatua-ass",
+       	"tag" : "Sagra",
+       	"address" : "Carnezizs",
+       	"latitude" : 42.5102079,
+       	"longitude" : 14.1436996,
+       	"price" : 5,
+       	"description" : "Tutti a mangiare e vaffanculo 'o mare'",
+       	"participation" : 0,
+       	"endDate" : "15/08 - 24:00",
+       	"image" : "url",
+       	"startDate" : "15/08 - 20:00",
+       	"date" : "15/08"
     }
 ]
