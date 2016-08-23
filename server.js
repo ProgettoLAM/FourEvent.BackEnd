@@ -75,6 +75,26 @@ apiRoutes.get('/event', function(req, res) {
     });
 });
 
+apiRoutes.get('/event/:email', function(req, res) {
+
+    MongoClient.connect(config.database, function(err, db) {
+
+        if(err) return res.send(err);
+
+        db.collection('planners').findOne({},{'events':true,'_id':false},function(err, result) {
+
+            if(err) return res.send(err);
+
+            db.collection('events').find({'_id': { '$in' : result.events}}).toArray(function(err,result) {
+
+                res.send(result);
+
+                db.close();
+            });
+        });
+    });
+});
+
 apiRoutes.get('/event/img/:image',function(req, res) {
 
     img = req.params.image;
