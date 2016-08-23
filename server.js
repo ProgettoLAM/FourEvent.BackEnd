@@ -104,6 +104,7 @@ apiRoutes.put('/event', function(req, res) {
             'image' : body.image,
             'latitude' : data.results[0].geometry.location.lat,
             'longitude' : data.results[0].geometry.location.lng,
+            'author' : body.author,
             'price' : 0
         };
 
