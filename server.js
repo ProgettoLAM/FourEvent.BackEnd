@@ -86,17 +86,45 @@ apiRoutes.get('/event/img/:image',function(req, res) {
 
 apiRoutes.put('/event', function(req, res) {
 
+    var body = req.body;
+
     //get coordinate from address
-    geocoder.geocode(req.body.address, function ( err, data ) {
+    geocoder.geocode(body.address, function ( err, data ) {
 
-        if(err) res.send(err);
+        if(err) res.status(500).send(err);
 
-        var result = {
-            address : data.results[0].formatted_address,
-            coordinates : data.results[0].geometry.location
+        var event = {
+
+            'title' : body.title,
+            'tag' : body.tag,
+            'address' : data.results[0].formatted_address,
+            'description' : body.description,
+            'start_date' : body.start_date,
+            'participations' : 0,
+            'image' : body.image,
+            'latitude' : data.results[0].geometry.location.lat,
+            'longitude' : data.results[0].geometry.location.lng,
+            'price' : 0
         };
 
-        res.send(data);
+        if(body.end_date) event.end_date = body.end_date;
+        if(body.tickets) event.tickets = body.tickets;
+        if(body.price) event.price = body.price;
+
+        MongoClient.connect(config.database, function(err, db) {
+
+            if(err) return res.send(err);
+
+            db.collection('events').insertOne(event,function(err, result) {
+
+                if(err) return res.send(err);
+
+                console.log("success");
+                res.send(event);
+
+                db.close();
+            });
+        });
     });
 });
 
@@ -386,6 +414,8 @@ apiRoutes.put('/record/:email', function(req,res) {
                 return res.status(406).send(err);
             }
 
+            var response = result;
+
             db.collection('users').updateOne(
                 {'_id':record.user},
                 {'$inc':{'balance':parseFloat(record.amount)}},
@@ -402,7 +432,7 @@ apiRoutes.put('/record/:email', function(req,res) {
                     };
 
                     console.log((result).green);
-                    res.send(result);
+                    res.send(record);
 
                     db.close();
                 }
