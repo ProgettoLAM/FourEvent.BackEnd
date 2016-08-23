@@ -36,11 +36,9 @@ app.use(bodyParser.json());
 // logger
 app.use(morgan('dev'));
 
-/*
- * apiRoutes è la variabile che fa riferimento al routing
- *
- */
 var apiRoutes = express.Router();
+
+//EVENT
 
 apiRoutes.get('/event', function(req, res) {
 
@@ -84,7 +82,7 @@ apiRoutes.get('/event/img/:image',function(req, res) {
     res.sendFile(__dirname+'/data/img/'+img);
 });
 
-apiRoutes.put('/event', function(req, res) {
+apiRoutes.put('/event/:email', function(req, res) {
 
     var body = req.body;
 
@@ -104,7 +102,7 @@ apiRoutes.put('/event', function(req, res) {
             'image' : body.image,
             'latitude' : data.results[0].geometry.location.lat,
             'longitude' : data.results[0].geometry.location.lng,
-            'author' : body.author,
+            'author' : req.params.email,
             'price' : 0
         };
 
@@ -116,18 +114,37 @@ apiRoutes.put('/event', function(req, res) {
 
             if(err) return res.send(err);
 
-            db.collection('events').insertOne(event,function(err, result) {
+            db.collection('events').insertOne(event,function(err,result) {
 
                 if(err) return res.send(err);
 
-                console.log("success");
-                res.send(event);
+                console.log(JSON.stringify(result).green);
 
-                db.close();
+                db.collection('planners').updateOne({'_id':event.author},
+                    {'$push': {'events': event._id}},
+                    function(err,result){
+
+                        if(err){
+                            console.log(JSON.stringify(err.message).red);
+                            return res.status(406).send(err);
+                        }
+
+                        result = {
+                            'name':'ok',
+                            'message':result
+                        };
+
+                        console.log(JSON.stringify(result).green);
+                        res.send(event);
+
+                        db.close();
+                });
             });
         });
     });
 });
+
+//USER
 
 apiRoutes.get('/user',function(req,res){
 
@@ -378,7 +395,7 @@ apiRoutes.put('/user',function(req, res) {
     }
 });
 
-/* ---------------------------------------- */
+//RECORD
 
 apiRoutes.put('/record/:email', function(req,res) {
 
@@ -468,7 +485,7 @@ apiRoutes.get('/record/:email', function(req,res) {
 });
 /* ---------------------------------------- */
 
-//TODO crea planner account
+//PLANNER
 
 apiRoutes.put('/planner/register', function(req,res) {
 
@@ -588,44 +605,6 @@ apiRoutes.get('/planner/:email', function(req,res) {
 
             db.close();
         });
-    });
-});
-
-apiRoutes.put('/planner/:email/event', function(req,res) {
-
-    MongoClient.connect(config.database, function(err, db) {
-
-        if(err){
-
-            console.log(JSON.stringify(err.message).red);
-            return res.status(503).send(err);
-        }
-
-        var cond = {
-            '_id':req.params.email,
-        };
-
-        db.collection('planners').updateOne(cond,
-            {
-                '$push': {'events': req.body}
-            },
-            function(err,result){
-
-                if(err){
-                    console.log(JSON.stringify(err.message).red);
-                    return res.status(406).send(err);
-                }
-
-                result = {
-                    'name':'ok',
-                    'message':result
-                };
-
-                console.log(JSON.stringify(result).green);
-                res.send(result);
-
-                db.close();
-            });
     });
 });
 
