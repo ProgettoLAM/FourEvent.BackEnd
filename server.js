@@ -11,7 +11,8 @@ var bodyParser  = require('body-parser');
 var morgan      = require('morgan');
 
 // driver mongo
-var MongoClient = require('mongodb').MongoClient;
+var mongo = require('mongodb');
+var MongoClient = mongo.MongoClient;
 
 // per autenticazione e token
 var jwt    = require('jsonwebtoken');
@@ -79,15 +80,52 @@ apiRoutes.get('/event/:email', function(req, res) {
 
     MongoClient.connect(config.database, function(err, db) {
 
-        if(err) return res.send(err);
+        if(err) return res.status(500).send(err);
 
-        db.collection('planners').findOne({},{'events':true,'_id':false},function(err, result) {
+        db.collection('planners').findOne({'_id':req.params.email},{'events':true,'_id':false},function(err, result) {
 
-            if(err) return res.send(err);
+            if(err) return res.status(500).send(err);
 
             db.collection('events').find({'_id': { '$in' : result.events}}).toArray(function(err,result) {
 
-                res.send(result);
+                if(err) return res.status(500).send(err);
+
+
+                if(result.length > 0) {
+
+                    res.send(result);
+
+                } else {
+
+                    res.status(404).send('Eventi non trovati');
+                }
+
+                db.close();
+            });
+        });
+    });
+});
+
+apiRoutes.delete('/event/:email/:id', function(req, res) {
+
+    MongoClient.connect(config.database, function(err, db) {
+
+        if(err) return res.status(500).send(err);
+
+        db.collection('planners').updateOne({'_id':req.params.email},
+        {'$pull':{'events':req.params.id}},function(err, result) {
+
+            if(err) return res.status(500).send(err);
+
+            console.log(result);
+
+            db.collection('events').removeOne({'_id': req.params.id },function(err,result) {
+
+                if(err) return res.status(500).send(err);
+
+                console.log(result);
+
+                res.send('ok');
 
                 db.close();
             });
@@ -111,20 +149,31 @@ apiRoutes.put('/event/:email', function(req, res) {
 
         if(err) res.status(500).send(err);
 
+        //console.log(JSON.stringify(data,null,2));
+
         var event = {
 
             'title' : body.title,
             'tag' : body.tag,
-            'address' : data.results[0].formatted_address,
             'description' : body.description,
             'start_date' : body.start_date,
             'participations' : 0,
+            'user_participations' : [],
             'image' : body.image,
             'latitude' : data.results[0].geometry.location.lat,
             'longitude' : data.results[0].geometry.location.lng,
             'author' : req.params.email,
-            'price' : 0
+            'price' : "FREE"
         };
+
+        data.results[0].address_components.forEach(function(component) {
+
+            if(component.types[0] === 'locality') {
+
+                event.address = component.short_name;
+                console.log(event.address);
+            }
+        });
 
         if(body.end_date) event.end_date = body.end_date;
         if(body.tickets) event.tickets = body.tickets;
@@ -154,7 +203,7 @@ apiRoutes.put('/event/:email', function(req, res) {
                             'message':result
                         };
 
-                        console.log(JSON.stringify(result).green);
+                        console.log(JSON.stringify(event).green);
                         res.send(event);
 
                         db.close();
@@ -384,7 +433,8 @@ apiRoutes.put('/user',function(req, res) {
 
             var user = {
                 '_id' : req.body.email,
-                'password' : sha256(req.body.password)
+                'password' : sha256(req.body.password),
+                'balance' : 0
             };
 
             console.log('found = ' + JSON.stringify(user).green);
@@ -431,6 +481,8 @@ apiRoutes.put('/record/:email', function(req,res) {
 
         console.log(date);
 
+        //controllo che non esista già questo evento
+
         var record = {
             'date' : date,
             'amount' : req.body.amount,
@@ -438,43 +490,82 @@ apiRoutes.put('/record/:email', function(req,res) {
             'user' : req.params.email
         };
 
-        if(req.body.event) {
+        if(req.body.event) record.event = req.body.event;
 
-            record.event = req.body.event;
-        }
+        db.collection('records').findOne({
 
-        console.log((record).green);
-
-        db.collection('records').insertOne(record,function(err, result) {
+            'amount' : req.body.amount,
+            'type' : req.body.type,
+            'user' : req.params.email
+            },
+            function(err, result) {
 
             if(err){
                 console.log(JSON.stringify(err.message).red);
                 return res.status(406).send(err);
             }
 
-            var response = result;
+            if(record.type === 'Acquisto biglietto' && result) {
 
-            db.collection('users').updateOne(
-                {'_id':record.user},
-                {'$inc':{'balance':parseFloat(record.amount)}},
-                function(err,result) {
+                console.log(JSON.stringify({'message':'Biglietto già acquistato!'}).red);
+                return res.status(403).send({'message':'Biglietto già acquistato!'});
+            }
 
-                    if(err){
-                        console.log(JSON.stringify(err.message).red);
-                        return res.status(406).send(err);
-                    }
+            db.collection('records').insertOne(record,function(err, result) {
 
-                    result = {
-                        'name':'ok',
-                        'message':'Inserimento e aggiornamento saldo completato con successo'
-                    };
-
-                    console.log((result).green);
-                    res.send(record);
-
-                    db.close();
+                if(err){
+                    console.log(JSON.stringify(err.message).red);
+                    return res.status(406).send(err);
                 }
-            );
+
+                var response = result;
+
+                db.collection('users').updateOne(
+                    {'_id':record.user},
+                    {'$inc':{'balance':parseFloat(record.amount)}},
+                    function(err,result) {
+
+                        if(err){
+                            console.log(JSON.stringify(err.message).red);
+                            return res.status(406).send(err);
+                        }
+
+                        console.log(JSON.stringify(result).green);
+
+                        if(record.event && record.type === 'Acquisto biglietto') {
+
+                            console.log(record.event);
+
+                            db.collection('events').updateOne(
+                                {
+                                    '_id':new mongo.ObjectID(record.event)
+                                },
+                                {
+                                    '$push' : {'user_participations':record.user}
+                                },
+                                function(err, result) {
+
+                                    if(err){
+                                        console.log(JSON.stringify(err.message).red);
+                                        return res.status(406).send(err);
+                                    }
+
+                                    console.log(JSON.stringify(result).green);
+
+                                    res.send(record);
+                                }
+                            );
+
+                        } else {
+
+                            console.log((result).green);
+                            res.send(record);
+
+                            db.close();
+                        }
+                    }
+                );
+            });
         });
     });
 });
@@ -495,6 +586,12 @@ apiRoutes.get('/record/:email', function(req,res) {
                     return res.status(406).send(err);
                 }
 
+                if(result.length < 0) {
+
+                    db.close();
+                    return res.status(404).send({'message':'Errore, record non trovati'});
+                }
+
                 console.log((result).green);
                 res.send(result);
 
@@ -503,7 +600,37 @@ apiRoutes.get('/record/:email', function(req,res) {
         );
     });
 });
-/* ---------------------------------------- */
+
+apiRoutes.get('/tickets/:email', function(req, res) {
+
+    MongoClient.connect(config.database, function(err, db) {
+
+        if(err){
+            console.log(JSON.stringify(err.message).red);
+            return res.status(406).send(err);
+        }
+
+        db.collection('records').find({'user':req.params.email,'type':'Acquisto biglietto'}).toArray(function(err,result) {
+
+                if(err){
+                    console.log(JSON.stringify(err.message).red);
+                    return res.status(406).send(err);
+                }
+
+                if(result.length === 0) {
+
+                    db.close();
+                    return res.status(404).send({'message':'Errore, record non trovati'});
+                }
+
+                console.log(JSON.stringify(result).green);
+                res.send(result);
+
+                db.close();
+            }
+        );
+    });
+});
 
 //PLANNER
 
@@ -646,6 +773,7 @@ apiRoutes.delete('/planner/:email', function(req,res) {
         });
     });
 });
+
 
 app.use('/api', apiRoutes);
 
