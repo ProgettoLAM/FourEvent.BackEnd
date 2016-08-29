@@ -168,10 +168,10 @@ apiRoutes.put('/event/img',upload.single('file'), function(req, res) {
           res.status(500).send({'message':err});
         } else {
 
-            console.log({
+            console.log(JSON.stringify({
                 message: 'File uploaded successfully',
                 filename: name
-            }.green);
+            }).green);
 
             res.json({
                 message: 'File uploaded successfully',
@@ -299,6 +299,33 @@ apiRoutes.get('/user/:email',function(req,res){
             db.close();
         });
     });
+});
+
+//upload image user
+apiRoutes.put('/user/img/:user_id',upload.single('file'), function(req, res) {
+
+    var array = req.file.originalname.split('.');
+    var ext = '.' + array[array.length-1];
+    var name = req.params.user_id + ext;
+
+    var file = __dirname + '/data/img/' + name;
+      fs.rename(req.file.path, file, function(err) {
+        if (err) {
+          console.log(err);
+          res.status(500).send({'message':err});
+        } else {
+
+            console.log(JSON.stringify({
+                message : 'File uploaded successfully',
+                filename : name
+            }).green);
+
+            res.json({
+                message: 'File uploaded successfully',
+                filename: name
+            });
+        }
+      });
 });
 
 //login
@@ -789,10 +816,10 @@ apiRoutes.put('/planner/img/:planner_id',upload.single('file'), function(req, re
           res.status(500).send({'message':err});
         } else {
 
-            console.log({
+            console.log(JSON.stringify({
                 message: 'File uploaded successfully',
                 filename: name
-            }.green);
+            }).green);
 
             res.json({
                 message: 'File uploaded successfully',
