@@ -43,7 +43,7 @@ var upload = multer({ dest: __dirname+'/data/img/'});
 var apiRoutes = express.Router();
 
 
-//EVENT
+//EVENT-------------------------------------------------------------------------
 
 apiRoutes.get('/event', function(req, res) {
 
@@ -254,7 +254,7 @@ apiRoutes.put('/event/:email', function(req, res) {
     });
 });
 
-//USER
+//USER--------------------------------------------------------------------------
 
 apiRoutes.get('/user',function(req,res){
 
@@ -556,7 +556,7 @@ apiRoutes.put('/user',function(req, res) {
     }
 });
 
-//RECORD
+//RECORD------------------------------------------------------------------------
 
 apiRoutes.put('/record/:email', function(req,res) {
 
@@ -724,7 +724,7 @@ apiRoutes.get('/tickets/:email', function(req, res) {
     });
 });
 
-//PLANNER
+//PLANNER-----------------------------------------------------------------------
 
 apiRoutes.put('/planners/register', function(req,res) {
 
@@ -823,7 +823,8 @@ apiRoutes.post('/planners/authenticate',function(req,res) {
 });
 
 //upload immagine profilo planner
-apiRoutes.put('/planner/img/:planner_id',upload.single('file'), function(req, res) {
+apiRoutes.put('/planner/img/:planner_id',upload.single('file'),
+    function(req, res) {
 
     var array = req.file.originalname.split('.');
     var ext = '.' + array[array.length-1];
@@ -971,6 +972,7 @@ apiRoutes.delete('/planners/:email', function(req,res) {
     });
 });
 
+//------------------------------------------------------------------------------
 
 app.use('/api', apiRoutes);
 
