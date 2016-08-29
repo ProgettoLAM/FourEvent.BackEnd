@@ -328,6 +328,25 @@ apiRoutes.put('/user/img/:user_id',upload.single('file'), function(req, res) {
       });
 });
 
+//download image user
+apiRoutes.get('/user/img/:user_id',function(req, res) {
+
+    console.log(req.params.user_id);
+
+    MongoClient.connect(config.database, function(err, db) {
+
+        if(err) return res.status(500).send(err);
+
+        db.collection('users').findOne({'_id':mongo.ObjectID(req.params.user_id)},
+            {'image':true,'_id':false},function(err, result) {
+
+                if(err) return res.status(500).send({"message":err});
+
+                res.sendFile(__dirname+'/data/img/'+result.image);
+        });
+    });
+});
+
 //login
 apiRoutes.post('/user',function(req,res){
 
@@ -583,7 +602,7 @@ apiRoutes.put('/record/:email', function(req,res) {
                 return res.status(403).send({'message':'Biglietto già acquistato!'});
             }
 
-                db.collection('records').insertOne(record,function(err, result) {
+            db.collection('records').insertOne(record,function(err, result) {
 
                 if(err){
                     console.log(JSON.stringify(err.message).red);
@@ -610,10 +629,11 @@ apiRoutes.put('/record/:email', function(req,res) {
 
                             db.collection('events').updateOne(
                                 {
-                            '_id':new mongo.ObjectID(record.event)
+                                    '_id':new mongo.ObjectID(record.event)
                                 },
                                 {
-                                    '$push' : {'user_participations':record.user}
+                                    '$push' : {'user_participations':record.user},
+                                    '$inc' : {'participations':1}
                                 },
                                 function(err, result) {
 
