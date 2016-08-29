@@ -6,6 +6,8 @@ var assert = require('assert');
 var colors = require('colors');
 var sha256 = require('sha256');
 var geocoder = require('geocoder');
+var multer = require('multer');
+
 
 var bodyParser  = require('body-parser');
 var morgan      = require('morgan');
@@ -37,7 +39,9 @@ app.use(bodyParser.json());
 // logger
 app.use(morgan('dev'));
 
+var upload = multer({ dest: __dirname+'/data/img/'});
 var apiRoutes = express.Router();
+
 
 //EVENT
 
@@ -133,11 +137,48 @@ apiRoutes.delete('/event/:email/:id', function(req, res) {
     });
 });
 
-apiRoutes.get('/event/img/:image',function(req, res) {
+apiRoutes.get('/event/img/:event_id',function(req, res) {
 
-    img = req.params.image;
-    console.log(img);
-    res.sendFile(__dirname+'/data/img/'+img);
+    console.log(req.params.event_id);
+
+    MongoClient.connect(config.database, function(err, db) {
+
+        if(err) return res.status(500).send(err);
+
+        db.collection('events').findOne({'_id':mongo.ObjectID(req.params.event_id)},
+            {'image':true,'_id':false},function(err, result) {
+
+                if(err) return res.status(500).send({"message":err});
+
+                res.sendFile(__dirname+'/data/img/'+result.image);
+        });
+    });
+});
+
+apiRoutes.put('/event/img',upload.single('file'), function(req, res) {
+
+    var array = req.file.originalname.split('.');
+    var ext = '.' + array[array.length-1];
+    var name = new Date().getTime()+ext;
+
+    var file = __dirname + '/data/img/' + name;
+      fs.rename(req.file.path, file, function(err) {
+        if (err) {
+          console.log(err);
+          res.status(500).send({'message':err});
+        } else {
+
+            console.log({
+                message: 'File uploaded successfully',
+                filename: name
+            }.green);
+
+            res.json({
+                message: 'File uploaded successfully',
+                filename: name
+            });
+        }
+      });
 });
 
 apiRoutes.put('/event/:email', function(req, res) {
@@ -511,7 +552,7 @@ apiRoutes.put('/record/:email', function(req,res) {
                 return res.status(403).send({'message':'Biglietto già acquistato!'});
             }
 
-            db.collection('records').insertOne(record,function(err, result) {
+                db.collection('records').insertOne(record,function(err, result) {
 
                 if(err){
                     console.log(JSON.stringify(err.message).red);
@@ -538,7 +579,7 @@ apiRoutes.put('/record/:email', function(req,res) {
 
                             db.collection('events').updateOne(
                                 {
-                                    '_id':new mongo.ObjectID(record.event)
+                            '_id':new mongo.ObjectID(record.event)
                                 },
                                 {
                                     '$push' : {'user_participations':record.user}
@@ -727,6 +768,61 @@ apiRoutes.post('/planner/authenticate',function(req,res) {
         console.log(JSON.stringify(err.message).red);
         return res.status(406).send(err);
     }
+});
+
+apiRoutes.post('/planner/:email', function(req,res) {
+
+    var body = req.body;
+
+    MongoClient.connect(config.database, function(err, db) {
+
+        if(err){
+
+            console.log(JSON.stringify(err.message).red);
+            return res.status(503).send(err);
+        }
+
+        var element = {};
+
+        if(body.name) element.name = body.name;
+
+        if(body.location) element.location = body.location;
+
+        if(body.gender) element.gender = body.gender;
+
+        if(body.birthDate) element.birthDate = body.birthDate;
+
+        if(body.categories) element.categories = body.categories;
+
+        if(body.role) element.role = body.role;
+
+        var cond = {'_id':req.params.email};
+
+        console.log(element);
+        console.log(cond);
+
+        db.collection('planners').updateOne(cond,
+            {
+                '$set': element
+            },
+            function(err,result){
+
+                if(err){
+                    console.log(JSON.stringify(err.message).red);
+                    return res.status(406).send(err);
+                }
+
+                result = {
+                    'name':'ok',
+                    'message':result
+                };
+
+                console.log(JSON.stringify(result).green);
+                res.send(result);
+
+                db.close();
+            });
+    });
 });
 
 apiRoutes.get('/planner/:email', function(req,res) {
