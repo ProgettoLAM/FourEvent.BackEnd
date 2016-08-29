@@ -775,6 +775,33 @@ apiRoutes.post('/planners/authenticate',function(req,res) {
     }
 });
 
+//aggiunta immagine profilo planner
+apiRoutes.put('/planner/img/:planner_id',upload.single('file'), function(req, res) {
+
+    var array = req.file.originalname.split('.');
+    var ext = '.' + array[array.length-1];
+    var name = req.params.planner_id + ext;
+
+    var file = __dirname + '/data/img/' + name;
+      fs.rename(req.file.path, file, function(err) {
+        if (err) {
+          console.log(err);
+          res.status(500).send({'message':err});
+        } else {
+
+            console.log({
+                message: 'File uploaded successfully',
+                filename: name
+            }.green);
+
+            res.json({
+                message: 'File uploaded successfully',
+                filename: name
+            });
+        }
+      });
+});
+
 //completamento profilo planner
 apiRoutes.post('/planners/:email', function(req,res) {
 
