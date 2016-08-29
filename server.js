@@ -301,6 +301,7 @@ apiRoutes.get('/user/:email',function(req,res){
     });
 });
 
+//login
 apiRoutes.post('/user',function(req,res){
 
     if(req.body.email && req.body.password){
@@ -350,6 +351,7 @@ apiRoutes.post('/user',function(req,res){
     }
 });
 
+//completamento profilo
 apiRoutes.post('/user/:email',function(req, res) {
 
     //TODO controllare se esiste un body
@@ -377,6 +379,8 @@ apiRoutes.post('/user/:email',function(req, res) {
         if(body.birthDate) element.birthDate = body.birthDate;
 
         if(body.categories) element.categories = body.categories;
+
+        if(body.image) element.image = body.image;
 
         var cond = {'_id':req.params.email};
 
@@ -690,7 +694,8 @@ apiRoutes.put('/planners/register', function(req,res) {
             var planner = {
                 '_id' : req.body.email,
                 'password' : sha256(req.body.password),
-                'events' : []
+                'events' : [],
+                'balance' : 0
             };
 
             console.log('found = ' + JSON.stringify(planner).green);
@@ -770,6 +775,7 @@ apiRoutes.post('/planners/authenticate',function(req,res) {
     }
 });
 
+//completamento profilo planner
 apiRoutes.post('/planners/:email', function(req,res) {
 
     var body = req.body;
@@ -795,6 +801,8 @@ apiRoutes.post('/planners/:email', function(req,res) {
         if(body.categories) element.categories = body.categories;
 
         if(body.role) element.role = body.role;
+
+        if(body.image) element.image = body.image;
 
         var cond = {'_id':req.params.email};
 
