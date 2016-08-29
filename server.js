@@ -822,7 +822,7 @@ apiRoutes.post('/planners/authenticate',function(req,res) {
     }
 });
 
-//aggiunta immagine profilo planner
+//upload immagine profilo planner
 apiRoutes.put('/planner/img/:planner_id',upload.single('file'), function(req, res) {
 
     var array = req.file.originalname.split('.');
@@ -847,6 +847,25 @@ apiRoutes.put('/planner/img/:planner_id',upload.single('file'), function(req, re
             });
         }
       });
+});
+
+//download immagine profilo planner
+apiRoutes.get('/planner/img/:planner_id',function(req, res) {
+
+    console.log(req.params.planner_id);
+
+    MongoClient.connect(config.database, function(err, db) {
+
+        if(err) return res.status(500).send(err);
+
+        db.collection('planners').findOne({'_id':mongo.ObjectID(req.params.planner_id)},
+            {'image':true,'_id':false},function(err, result) {
+
+                if(err) return res.status(500).send({"message":err});
+
+                res.sendFile(__dirname+'/data/img/'+result.image);
+        });
+    });
 });
 
 //completamento profilo planner
