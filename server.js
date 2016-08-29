@@ -675,7 +675,7 @@ apiRoutes.get('/tickets/:email', function(req, res) {
 
 //PLANNER
 
-apiRoutes.put('/planner/register', function(req,res) {
+apiRoutes.put('/planners/register', function(req,res) {
 
     if(req.body.email && req.body.password){
 
@@ -721,7 +721,7 @@ apiRoutes.put('/planner/register', function(req,res) {
     }
 });
 
-apiRoutes.post('/planner/authenticate',function(req,res) {
+apiRoutes.post('/planners/authenticate',function(req,res) {
 
     if(req.body.email && req.body.password){
 
@@ -770,7 +770,7 @@ apiRoutes.post('/planner/authenticate',function(req,res) {
     }
 });
 
-apiRoutes.post('/planner/:email', function(req,res) {
+apiRoutes.post('/planners/:email', function(req,res) {
 
     var body = req.body;
 
@@ -825,7 +825,7 @@ apiRoutes.post('/planner/:email', function(req,res) {
     });
 });
 
-apiRoutes.get('/planner/:email', function(req,res) {
+apiRoutes.get('/planners/:email', function(req,res) {
 
     MongoClient.connect(config.database, function(err, db) {
 
@@ -851,7 +851,7 @@ apiRoutes.get('/planner/:email', function(req,res) {
     });
 });
 
-apiRoutes.delete('/planner/:email', function(req,res) {
+apiRoutes.delete('/planners/:email', function(req,res) {
 
     MongoClient.connect(config.database, function(err, db) {
 
