@@ -45,7 +45,7 @@ var apiRoutes = express.Router();
 
 //EVENT-------------------------------------------------------------------------
 
-apiRoutes.get('/event', function(req, res) {
+apiRoutes.get('/event/:email', function(req, res) {
 
     MongoClient.connect(config.database, function(err, db) {
 
@@ -64,12 +64,25 @@ apiRoutes.get('/event', function(req, res) {
 
             if(result.length === 0){
 
-                var error = {'name':'Events not found','message':'Eventi non trovati'};
+                var error = {'message':'Eventi non trovati'};
                 console.log(JSON.stringify(error).red);
-
 
                 res.status(404).send(error);
             }else{
+
+                for(var i=0; i<result.length; i++) {
+
+                    result[i].participate = false;
+                    var users = result[i].user_participations;
+
+                    for(var j=0; j<users.length; j++) {
+
+                        if(req.params.email === users[j]) {
+
+                            result[i].participate = true;
+                        }
+                    }
+                }
 
                 console.log(JSON.stringify(result).green);
                 res.send(result);
@@ -181,7 +194,40 @@ apiRoutes.put('/event/img',upload.single('file'), function(req, res) {
       });
 });
 
-apiRoutes.put('/event/:email', function(req, res) {
+apiRoutes.post('/event/partecipate/:event_id', function(req, res) {
+
+    MongoClient.connect(config.database, function(err, db) {
+
+        if(err) {
+
+            console.log(JSON.stringify(err).red);
+            return res.status(500).send(err);
+        }
+
+        var condition = {'_id':mongo.ObjectID(req.params.event_id)};
+
+        var update = {
+            '$addToSet': {
+                'user_participations':req.body.email
+            }
+        };
+
+        db.collection('events').updateOne(condition,update,function(err,result) {
+
+            if(err) {
+
+                console.log(JSON.stringify(err).red);
+                return res.status(500).send(err);
+            }
+
+            console.log(JSON.stringify(result).green);
+            res.send(result);
+        });
+    });
+});
+
+//creazione dell'evento da parte del planner
+apiRoutes.put('/event/', function(req, res) {
 
     var body = req.body;
 
@@ -190,12 +236,10 @@ apiRoutes.put('/event/:email', function(req, res) {
 
         if(err) res.status(500).send(err);
 
-        //console.log(JSON.stringify(data,null,2));
-
         var event = {
 
             'title' : body.title,
-            'tag' : body.tag,
+            'tag' : '#'+body.tag,
             'description' : body.description,
             'start_date' : body.start_date,
             'participations' : 0,
@@ -203,7 +247,7 @@ apiRoutes.put('/event/:email', function(req, res) {
             'image' : body.image,
             'latitude' : data.results[0].geometry.location.lat,
             'longitude' : data.results[0].geometry.location.lng,
-            'author' : req.params.email,
+            'author' : body.author,
             'price' : "FREE"
         };
 
@@ -337,7 +381,7 @@ apiRoutes.get('/user/img/:user_id',function(req, res) {
 
         if(err) return res.status(500).send(err);
 
-        db.collection('users').findOne({'_id':mongo.ObjectID(req.params.user_id)},
+        db.collection('users').findOne({'_id':req.params.user_id},
             {'image':true,'_id':false},function(err, result) {
 
                 if(err) return res.status(500).send({"message":err});
@@ -481,31 +525,52 @@ apiRoutes.post('/user/changepassword/:email', function(req, res) {
                 'password': oldPass
             };
 
-            db.collection('users').updateOne(cond,
-                {
+            console.log(cond);
+
+            db.collection('users').findOne(cond, function(err, result) {
+
+                if(err){
+                    console.log(JSON.stringify(err.message).red);
+                    return res.status(406).send(err);
+                }
+
+                var update = {
                     '$set': {'password': newPass}
-                },
-                function(err,result){
+                };
 
-                    if(err){
-                        console.log(JSON.stringify(err.message).red);
-                        return res.status(406).send(err);
-                    }
+                console.log(result);
 
-                    result = {
-                        'name':'ok',
-                        'message':result
-                    };
+                if(result) {
 
-                    console.log(JSON.stringify(result).green);
-                    res.send(result);
+                    db.collection('users').updateOne(cond,update,function(err,result){
 
-                    db.close();
-                });
+                        if(err){
+                            console.log(JSON.stringify(err.message).red);
+                            return res.status(406).send(err);
+                        }
+
+                        result = {
+                            'message':'Password cambiata con successo'
+                        };
+
+                        console.log(JSON.stringify(result).green);
+                        res.send(result);
+
+                        db.close();
+                    });
+                } else {
+                    err = {"message":"Password errata"};
+                    console.log(JSON.stringify(err).red);
+
+                    return res.status(404).send(err);
+                }
+            });
         });
+
     } else {
 
-        console.log('Error, password not found'.red);
+        var err = {'message':'Errore, le password coincidono'};
+        console.log(JSON.stringify(err).red);
         return res.status(503).send(err);
     }
 });
