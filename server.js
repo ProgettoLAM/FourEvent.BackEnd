@@ -50,81 +50,61 @@ MongoClient.connect(config.database, function(err, database) {
 
 //EVENT-------------------------------------------------------------------------
 
-
+//lista di eventi
 apiRoutes.get('/event/:email', function(req, res) {
 
-    MongoClient.connect(config.database, function(err, db) {
+    //cerco tutti gli eventi
+    db.collection('events').find({},{},{'$sort':{'start_date':1}}).toArray(function(err, result) {
 
-        if(err){
+        if(err) return handleError(err,500);
 
-            console.log(JSON.stringify(err.message).red);
-            return res.status(503).send(err);
-        }
+        if(result.length === 0) return handleError({'message':'Eventi non trovati'},404);
 
-        db.collection('events').find({},{},{'$sort':{'start_date':1}}).toArray(function(err, result) {
+        //se gli eventi esistono, controllo per ogni evento
+        //se l'utente richiedente partecipa all'evento
+        else {
 
-            if(err){
-                console.log(JSON.stringify(err.message).red);
-                return res.status(406).send(err);
-            }
+            for(var i=0; i<result.length; i++) {
 
-            if(result.length === 0){
+                result[i].participate = false;
+                var users = result[i].user_participations;
 
-                var error = {'message':'Eventi non trovati'};
-                console.log(JSON.stringify(error).red);
+                for(var j=0; j<users.length; j++) {
 
-                res.status(404).send(error);
-            }else{
+                    if(req.params.email === users[j]) {
 
-                for(var i=0; i<result.length; i++) {
-
-                    result[i].participate = false;
-                    var users = result[i].user_participations;
-
-                    for(var j=0; j<users.length; j++) {
-
-                        if(req.params.email === users[j]) {
-
-                            result[i].participate = true;
-                        }
+                        result[i].participate = true;
                     }
                 }
-
-                console.log(JSON.stringify(result).green);
-                res.send(result);
             }
 
-            db.close();
-        });
+            console.log(JSON.stringify(result).green);
+            res.send(result);
+        }
     });
 });
 
-apiRoutes.get('/event/planner/:email', function(req, res) {
+//lista di eventi creati dal planner
+apiRoutes.get('/event/planner/:planner_email', function(req, res) {
 
-    MongoClient.connect(config.database, function(err, db) {
+    var cond,project;
 
-        if(err) return res.status(500).send(err);
+    //cerco la lista di id degli eventi di un planner
+    cond = {'_id':req.params.planner_email};
+    project = {'events':true,'_id':false};
+    db.collection('planners').findOne(cond,project,function(err, result) {
 
-        db.collection('planners').findOne({'_id':req.params.email},{'events':true,'_id':false},function(err, result) {
+        if(err) return handleError(err,500);
 
-            if(err) return res.status(500).send(err);
+        //cerco tutti gli eventi di quel planner
+        cond = {'_id': { '$in' : result.events}};
+        db.collection('events').find(cond).toArray(function(err,result) {
 
-            db.collection('events').find({'_id': { '$in' : result.events}}).toArray(function(err,result) {
+            if(err) return handleError(err,500);
 
-                if(err) return res.status(500).send(err);
+            if(result.length > 0) res.send(result);
 
-
-                if(result.length > 0) {
-
-                    res.send(result);
-
-                } else {
-
-                    res.status(404).send('Eventi non trovati');
-                }
-
-                db.close();
-            });
+            else return res.status(404).send({'message':'Eventi non trovati'});
         });
     });
 });
@@ -663,50 +643,29 @@ apiRoutes.post('/user/changepassword/:email', function(req, res) {
     }
 });
 
+//registrazione utente
 apiRoutes.put('/user',function(req, res) {
 
+    //controllo se il client mi ha passato email e password
     if(req.body.email && req.body.password){
 
-        MongoClient.connect(config.database, function(err, db) {
+        //imposto l'utente
+        var user = {
+            '_id' : req.body.email,
+            'password' : sha256(req.body.password),
+            'balance' : 0
+        };
 
-            if(err){
+        //inserisco l'utente nella collection utenti
+        db.collection('users').insertOne(user,function(err, result) {
 
-                console.log(JSON.stringify(err.message).red);
-                return res.status(503).send(err);
-            }
+            if(err) return handleError({'message':"Errore, l'email selezionata è già stata scelta."},406);
 
-            var user = {
-                '_id' : req.body.email,
-                'password' : sha256(req.body.password),
-                'balance' : 0
-            };
-
-            console.log('found = ' + JSON.stringify(user).green);
-
-            db.collection('users').insertOne(user,function(err, result) {
-
-                if(err){
-                    console.log(JSON.stringify(err.message).red);
-                    return res.status(406).send(err);
-                }
-
-                result = {
-                    'name':'ok',
-                    'message':'Inserimento completato con successo'
-                };
-
-                console.log(JSON.stringify(result).green);
-                res.send(result);
-
-                db.close();
-            });
+            res.send({'message':'Inserimento completato con successo'});
         });
-    }else {
-        var err = {'name':'User not found','message':'Error, user not found in headers'};
-
-        console.log(JSON.stringify(err.message).red);
-        return res.status(406).send(err);
     }
+
+    else return handleError({'message':'Errore, utente non trovato!'},406);
 });
 
 //RECORD------------------------------------------------------------------------
