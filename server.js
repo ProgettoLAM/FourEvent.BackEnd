@@ -713,120 +713,73 @@ apiRoutes.put('/user',function(req, res) {
 
 apiRoutes.put('/record/:email', function(req,res) {
 
-    MongoClient.connect(config.database, function(err, db) {
+    var condition = {},
+        update = {};
+    //creo il nuovo record da inserire nel database
+    //controllando se è un acquisto, in questo caso ha anche l'id dell'evento
+    var date = new Date().getTime();
+    var record = {
+        'date' : date,
+        'amount' : req.body.amount,
+        'type' : req.body.type,
+        'user' : req.params.email
+    };
+    if(req.body.event) record.event = req.body.event;
 
-        if(err){
+    //cerco lo stesso record all'interno della collection record
+    condition = {'amount' : req.body.amount,'type' : req.body.type,'user' : req.params.email};
+    db.collection('records').findOne(condition,function(err, result) {
 
-            console.log(JSON.stringify(err.message).red);
-            return res.status(503).send(err);
+        if(err) return handleError(err,500);
+
+        //se il record cercato è un acquisto di un biglietto
+        //e se la query indica che esiste già lo stesso risultato
+        //ritorno un errore, notificando l'acquisto già avvenuto
+        if(record.type === 'Acquisto biglietto' && result) {
+
+            if(err) return handleError({'message':'Biglietto già acquistato!'},403);
         }
 
-        var date = new Date().getTime();
+        //provo ad inserire il biglietto all'interno della collection records
+        db.collection('records').insertOne(record,function(err, result) {
 
-        //controllo che non esista già questo evento
-        var record = {
-            'date' : date,
-            'amount' : req.body.amount,
-            'type' : req.body.type,
-            'user' : req.params.email
-        };
+            if(err) return handleError(err,406);
 
-        if(req.body.event) record.event = req.body.event;
+            //eseguo l'update del campo balance dell'utente scelto
+            condition = {'_id':record.user};
+            update = {'$inc':{'balance':parseFloat(record.amount)}};
+            db.collection('users').updateOne(condition,update,function(err,result) {
 
-        db.collection('records').findOne({
+                if(err) return handleError(err,406);
 
-            'amount' : req.body.amount,
-            'type' : req.body.type,
-            'user' : req.params.email
-            },
-            function(err, result) {
+                //se si tratta dell'acquisto di un biglietto
+                //aggiungo l'email dell'utente tra i partecipanti dell'evento
+                if(record.event && record.type === 'Acquisto biglietto') {
 
-            if(err){
-                console.log(JSON.stringify(err.message).red);
-                return res.status(406).send(err);
-            }
+                    var response = {'record': record};
 
+                    //aggiungo all'array delle partecipazioni, l'email dell'utente
+                    condition ={'_id':new mongo.ObjectID(record.event)};
+                    update = {'$push' : {'user_participations':record.user}};
+                    db.collection('events').updateOne(condition,update,function(err, result) {
 
-            if(record.type === 'Acquisto biglietto' && result) {
+                        if(err) return handleError(err,406);
 
-                console.log(JSON.stringify({'message':'Biglietto già acquistato!'}).red);
-                return res.status(403).send({'message':'Biglietto già acquistato!'});
-            }
+                        //eseguo un aggregate per restituirmi la lunghezza dell'array delle partecipazioni
+                        condition = [{'$match' : condition},{'$project': {'participations': { $size: "$user_participations" }}}];
+                        db.collection('events').aggregate(condition, function(err, result) {
 
+                            response.message = 'Evvai!, adesso partecipi a questo evento!';
+                            response.participations = result[0].participations;
+                            res.send(response);
+                        });
+                    });
 
-            db.collection('records').insertOne(record,function(err, result) {
+                } else {
 
-                if(err){
-                    console.log(JSON.stringify(err.message).red);
-                    return res.status(406).send(err);
+                    console.log((result).green);
+                    res.send(record);
                 }
-
-                var response = {
-                    'record' : result
-                };
-
-                db.collection('users').updateOne(
-                    {'_id':record.user},
-                    {'$inc':{'balance':parseFloat(record.amount)}},
-                    function(err,result) {
-
-                        if(err){
-                            console.log(JSON.stringify(err.message).red);
-                            return res.status(406).send(err);
-                        }
-
-                        console.log(JSON.stringify(result).green);
-
-                        if(record.event && record.type === 'Acquisto biglietto') {
-
-                            console.log(record.event);
-
-                            var condition ={'_id':new mongo.ObjectID(record.event)};
-
-                            db.collection('events').updateOne(
-                                condition,
-                                {
-                                    '$push' : {'user_participations':record.user}
-                                },
-                                function(err, result) {
-
-                                    if(err){
-                                        console.log(JSON.stringify(err.message).red);
-                                        return res.status(406).send(err);
-                                    }
-
-                                    console.log(JSON.stringify(result).green);
-
-                                    var aggregateCond = [
-                                        {
-                                            '$match' : condition
-                                        },
-                                        {
-                                            '$project': {
-                                                'participations': { $size: "$user_participations" }
-                                            }
-                                        }
-                                    ];
-
-                                    db.collection('events').aggregate(aggregateCond, function(err, result) {
-
-                                        response.message = 'Evvai!, adesso partecipi a questo evento!';
-
-                                        console.log(JSON.stringify(result[0]).green);
-                                        res.send(response);
-                                    });
-                                }
-                            );
-
-                        } else {
-
-                            console.log((result).green);
-                            res.send(record);
-
-                            db.close();
-                        }
-                    }
-                );
             });
         });
     });
@@ -1146,6 +1099,11 @@ apiRoutes.delete('/planners/:email', function(req,res) {
 
 app.use('/api', apiRoutes);
 
+function handleError(err,status) {
+
+    console.log(JSON.stringify(err.message).red);
+    return res.status(status).send(err);
+}
 
 /*
  * mette il server in ascolto sulla porta 3000
