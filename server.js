@@ -51,62 +51,72 @@ MongoClient.connect(config.database, function(err, database) {
 //EVENT-------------------------------------------------------------------------
 
 //lista di eventi
-apiRoutes.get('/event/:email', function(req, res) {
+apiRoutes.get('/event/:type/:email', function(req, res) {
 
-    //cerco tutti gli eventi
-    db.collection('events').find({},{},{'$sort':{'start_date':1}}).toArray(function(err, result) {
+    var cond, project;
+    switch (req.params.type) {
+        case "near":
 
-        if(err) return handleError(err,500);
+            //cerco tutti gli eventi
+            db.collection('events').find({},{},{'$sort':{'start_date':1}}).toArray(function(err, result) {
 
-        if(result.length === 0) return handleError({'message':'Eventi non trovati'},404);
+                if(err) return handleError(err,500,res);
 
-        //se gli eventi esistono, controllo per ogni evento
-        //se l'utente richiedente partecipa all'evento
-        else {
+                if(result.length === 0) return handleError({'message':'Eventi non trovati'},404,res);
 
-            for(var i=0; i<result.length; i++) {
+                //se gli eventi esistono, controllo per ogni evento
+                //se l'utente richiedente partecipa all'evento
+                else {
 
-                result[i].participate = false;
-                var users = result[i].user_participations;
+                    for(var i=0; i<result.length; i++) {
 
-                for(var j=0; j<users.length; j++) {
+                        result[i].participate = false;
+                        var users = result[i].user_participations;
 
-                    if(req.params.email === users[j]) {
+                        for(var j=0; j<users.length; j++) {
 
-                        result[i].participate = true;
+                            if(req.params.email === users[j]) {
+
+                                result[i].participate = true;
+                            }
+                        }
                     }
+
+                    console.log(JSON.stringify(result).green);
+                    res.send(result);
                 }
-            }
+            });
+            break;
 
-            console.log(JSON.stringify(result).green);
-            res.send(result);
-        }
-    });
-});
+        case "category":
 
-//lista di eventi creati dal planner
-apiRoutes.get('/event/planner/:planner_email', function(req, res) {
+            cond = {'_id':req.params.email};
+            project = {'categories.name':1,'_id':0};
+            db.collection('users').findOne(cond,project,function(err, result) {
 
-    var cond,project;
+                if(err) return handleError(err,500,res);
 
-    //cerco la lista di id degli eventi di un planner
-    cond = {'_id':req.params.planner_email};
-    project = {'events':true,'_id':false};
-    db.collection('planners').findOne(cond,project,function(err, result) {
+                var tmpCat = [];
+                for(var i=0; i<result.categories.length; i++) {
 
-        if(err) return handleError(err,500);
+                    tmpCat.push(result.categories[i].name);
+                }
 
-        //cerco tutti gli eventi di quel planner
-        cond = {'_id': { '$in' : result.events}};
-        db.collection('events').find(cond).toArray(function(err,result) {
+                cond = {'tag':{'$in':tmpCat}};
+                db.collection('events').find(cond).toArray(function(err, result) {
 
-            if(err) return handleError(err,500);
+                    if(err) return handleError(err,500,res);
 
-            if(result.length > 0) res.send(result);
+                    if(result.length === 0) return handleError({'message':'Eventi non trovati!'},404,res);
 
-            else return res.status(404).send({'message':'Eventi non trovati'});
-        });
-    });
+                    res.send(result);
+                });
+            });
+            break;
+
+        default:
+            res.send('yo');
+    }
 });
 
 apiRoutes.delete('/event/:email/:id', function(req, res) {
@@ -307,7 +317,7 @@ apiRoutes.put('/event/', function(req, res) {
         var event = {
 
             'title' : body.title,
-            'tag' : '#'+body.tag,
+            'tag' : body.tag,
             'description' : body.description,
             'start_date' : body.start_date,
             'participations' : 0,
@@ -659,18 +669,18 @@ apiRoutes.put('/user',function(req, res) {
         //inserisco l'utente nella collection utenti
         db.collection('users').insertOne(user,function(err, result) {
 
-            if(err) return handleError({'message':"Errore, l'email selezionata è già stata scelta."},406);
+            if(err) return handleError({'message':"Errore, l'email selezionata è già stata scelta."},406,res);
 
             res.send({'message':'Inserimento completato con successo'});
         });
     }
 
-    else return handleError({'message':'Errore, utente non trovato!'},406);
+    else return handleError({'message':'Errore, utente non trovato!'},406,res);
 });
 
 //RECORD------------------------------------------------------------------------
 
-apiRoutes.put('/record/:email', function(req,res) {
+apiRoutes.put('/records/:email', function(req,res) {
 
     var condition = {},
         update = {};
@@ -689,27 +699,27 @@ apiRoutes.put('/record/:email', function(req,res) {
     condition = {'amount' : req.body.amount,'type' : req.body.type,'user' : req.params.email};
     db.collection('records').findOne(condition,function(err, result) {
 
-        if(err) return handleError(err,500);
+        if(err) return handleError(err,500,res);
 
         //se il record cercato è un acquisto di un biglietto
         //e se la query indica che esiste già lo stesso risultato
         //ritorno un errore, notificando l'acquisto già avvenuto
         if(record.type === 'Acquisto biglietto' && result) {
 
-            if(err) return handleError({'message':'Biglietto già acquistato!'},403);
+            if(err) return handleError({'message':'Biglietto già acquistato!'},403,res);
         }
 
         //provo ad inserire il biglietto all'interno della collection records
         db.collection('records').insertOne(record,function(err, result) {
 
-            if(err) return handleError(err,406);
+            if(err) return handleError(err,406,res);
 
             //eseguo l'update del campo balance dell'utente scelto
             condition = {'_id':record.user};
             update = {'$inc':{'balance':parseFloat(record.amount)}};
             db.collection('users').updateOne(condition,update,function(err,result) {
 
-                if(err) return handleError(err,406);
+                if(err) return handleError(err,406,res);
 
                 //se si tratta dell'acquisto di un biglietto
                 //aggiungo l'email dell'utente tra i partecipanti dell'evento
@@ -722,7 +732,7 @@ apiRoutes.put('/record/:email', function(req,res) {
                     update = {'$push' : {'user_participations':record.user}};
                     db.collection('events').updateOne(condition,update,function(err, result) {
 
-                        if(err) return handleError(err,406);
+                        if(err) return handleError(err,406,res);
 
                         //eseguo un aggregate per restituirmi la lunghezza dell'array delle partecipazioni
                         condition = [{'$match' : condition},{'$project': {'participations': { $size: "$user_participations" }}}];
@@ -744,65 +754,80 @@ apiRoutes.put('/record/:email', function(req,res) {
     });
 });
 
-apiRoutes.get('/record/:email', function(req,res) {
+apiRoutes.get('/records/:email', function(req,res) {
 
-    MongoClient.connect(config.database, function(err, db) {
+    var cond;
 
-        if(err){
-            console.log(JSON.stringify(err.message).red);
-            return res.status(406).send(err);
-        }
+    cond = {'user':req.params.email};
+    db.collection('records').find(cond).toArray(function(err,result) {
 
-        db.collection('records').find({'user':req.params.email}).toArray(function(err,result) {
+        if(err) return handleError(err,500,res);
 
-                if(err){
-                    console.log(JSON.stringify(err.message).red);
-                    return res.status(406).send(err);
+        var recordsLeft = result.length;
+        var onComplete = function() { res.send(result); };
+
+        if(recordsLeft === 0)
+            return handleError({'message':'Errore, record non trovati'},404,res);
+
+        result.forEach(function(record) {
+
+            if(record.type === "Acquisto biglietto") {
+
+                cond = {'_id':mongo.ObjectID(record.event)};
+                db.collection('events').findOne(cond,function(err,result) {
+
+                    if(err) return handleError(err,500,res);
+
+                    record.event = result.title;
+
+                    if(--recordsLeft === 0) {
+
+                        onComplete();
+                    }
+                });
+            } else {
+
+                if(--recordsLeft === 0) {
+
+                    onComplete();
                 }
-
-                if(result.length < 0) {
-
-                    db.close();
-                    return res.status(404).send({'message':'Errore, record non trovati'});
-                }
-
-                console.log((result).green);
-                res.send(result);
-
-                db.close();
             }
-        );
+        });
     });
 });
 
 apiRoutes.get('/tickets/:email', function(req, res) {
 
-    MongoClient.connect(config.database, function(err, db) {
+    var cond;
 
-        if(err){
-            console.log(JSON.stringify(err.message).red);
-            return res.status(406).send(err);
-        }
+    //cerco tutti i record che indicano l'acquisto di un biglietto
+    cond = {'user':req.params.email,'type':'Acquisto biglietto'};
+    db.collection('records').find(cond).toArray(function(err,result) {
 
-        db.collection('records').find({'user':req.params.email,'type':'Acquisto biglietto'}).toArray(function(err,result) {
+        if(err) return handleError(err, 500, res);
 
-                if(err){
-                    console.log(JSON.stringify(err.message).red);
-                    return res.status(406).send(err);
+        var ticketsLeft = result.length;
+        var onComplete = function() { res.send(result); };
+
+        if(ticketsLeft === 0)
+            return handleError({'message':'Errore, record non trovati'},404,res);
+
+        result.forEach(function(ticket) {
+
+            console.log(ticket.event);
+            cond = {'_id':mongo.ObjectID(ticket.event)};
+            db.collection('events').findOne(cond,function(err,result) {
+
+                if(err) return handleError(err,500,res);
+
+                if(result) ticket.event = result.title;
+
+                if(--ticketsLeft === 0) {
+
+                    onComplete();
                 }
-
-                if(result.length === 0) {
-
-                    db.close();
-                    return res.status(404).send({'message':'Errore, record non trovati'});
-                }
-
-                console.log(JSON.stringify(result).green);
-                res.send(result);
-
-                db.close();
-            }
-        );
+            });
+        });
     });
 });
 
@@ -1054,11 +1079,37 @@ apiRoutes.delete('/planners/:email', function(req,res) {
     });
 });
 
+//lista di eventi creati dal planner
+apiRoutes.get('/planners/event/:planner_email', function(req, res) {
+
+    var cond,project;
+
+    //cerco la lista di id degli eventi di un planner
+    cond = {'_id':req.params.planner_email};
+    project = {'events':true,'_id':false};
+
+    db.collection('planners').findOne(cond,project,function(err, result) {
+
+        if(err) return handleError(err,500,res);
+
+        //cerco tutti gli eventi di quel planner
+        cond = {'_id': { '$in' : result.events}};
+        db.collection('events').find(cond).toArray(function(err,result) {
+
+            if(err) return handleError(err,500,res);
+
+            if(result.length === 0) return handleError({'message':'Eventi non trovati'},500,res);
+
+            res.send(result);
+        });
+    });
+});
+
 //------------------------------------------------------------------------------
 
 app.use('/api', apiRoutes);
 
-function handleError(err,status) {
+function handleError(err,status,res) {
 
     console.log(JSON.stringify(err.message).red);
     return res.status(status).send(err);
