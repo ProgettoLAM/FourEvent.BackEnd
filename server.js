@@ -283,17 +283,19 @@ apiRoutes.delete('/event/:email/:id', function(req, res) {
     var cond,update;
 
     cond = {'_id':req.params.email};
-    update = {'$pull':{'events':req.params.id}};
+    update = {'$pull':{'events':mongo.ObjectID(req.params.id)}};
     db.collection('planners').updateOne(cond,update,function(err, result) {
 
         if(err) return handleError(err,500,res);
 
-        cond = {'_id': req.params.id };
+        cond = {'_id': mongo.ObjectID(req.params.id)};
         db.collection('events').removeOne(cond,function(err,result) {
 
             if(err) return handleError(err,500,res);
 
-            res.send({'message':''});
+            if(result.result.n === 0) return handleError({'message':'Evento non trovato'},404,res);
+
+            res.send({'message':'Evento eliminato'});
         });
     });
 });
@@ -871,10 +873,6 @@ function handleError(err,status,res) {
     return res.status(status).send(err);
 }
 
-/*
- * mette il server in ascolto sulla porta 3000
- *
- */
 app.listen(port, function () {
   	console.log('FourEvent.Backend in listening on ' + url);
 });
