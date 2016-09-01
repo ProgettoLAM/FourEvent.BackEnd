@@ -50,42 +50,67 @@ MongoClient.connect(config.database, function(err, database) {
 
 //EVENT-------------------------------------------------------------------------
 
-//lista di eventi
-apiRoutes.get('/event/:type/:email', function(req, res) {
+function checkParticipation(result,email) {
+
+    for(var i=0; i<result.length; i++) {
+
+        result[i].participate = false;
+        var users = result[i].user_participations;
+
+        for(var j=0; j<users.length; j++) {
+
+            if(email === users[j]) {
+
+                result[i].participate = true;
+            }
+        }
+    }
+
+    return result;
+}
+
+
+apiRoutes.get('/event/:email', function(req, res) {
 
     var cond, project;
-    switch (req.params.type) {
+    switch (req.query.type) {
         case "near":
 
-            //cerco tutti gli eventi
-            db.collection('events').find({},{},{'$sort':{'start_date':1}}).toArray(function(err, result) {
+            var lng = req.query.lng,
+                lat = req.query.lat;
 
-                if(err) return handleError(err,500,res);
+            if(lng && lat) {
 
-                if(result.length === 0) return handleError({'message':'Eventi non trovati'},404,res);
-
-                //se gli eventi esistono, controllo per ogni evento
-                //se l'utente richiedente partecipa all'evento
-                else {
-
-                    for(var i=0; i<result.length; i++) {
-
-                        result[i].participate = false;
-                        var users = result[i].user_participations;
-
-                        for(var j=0; j<users.length; j++) {
-
-                            if(req.params.email === users[j]) {
-
-                                result[i].participate = true;
-                            }
-                        }
+                cond = [
+                    {
+                        "$geoNear": {
+                            "near": {
+                                 "type": "Point",
+                                 "coordinates": [parseFloat(lng), parseFloat(lat)]
+                             },
+                             "distanceField": "distance",
+                             "maxDistance": 5000,
+                             "spherical": true,
+                             "query": { "loc.type": "Point" }
+                         }
+                    },
+                    {
+                         "$sort": {"distance": 1} // Sort the nearest first
                     }
+                ];
 
-                    console.log(JSON.stringify(result).green);
-                    res.send(result);
-                }
-            });
+                db.collection('events').aggregate(cond,function(err,result) {
+
+                    if(err) return handleError(err,500,res);
+
+                    if(result.length === 0) return handleError({'message':'Eventi non trovati'},404,res);
+
+                    res.send(checkParticipation(result,req.params.email));
+                });
+
+            } else
+                return handleError({'message':'Forbidden'},406,res);
+
             break;
 
         case "category":
@@ -109,210 +134,40 @@ apiRoutes.get('/event/:type/:email', function(req, res) {
 
                     if(result.length === 0) return handleError({'message':'Eventi non trovati!'},404,res);
 
-                    res.send(result);
+                    res.send(checkParticipation(result,req.params.email));
                 });
             });
             break;
 
+        case "popular":
+
+            return handleError({'message':'Non ci sono eventi popolari'},404,res);
+
         default:
-            res.send('yo');
+            return handleError({'message':'tipo non trovato'},404,res);
     }
-});
-
-apiRoutes.delete('/event/:email/:id', function(req, res) {
-
-    MongoClient.connect(config.database, function(err, db) {
-
-        if(err) return res.status(500).send(err);
-
-        db.collection('planners').updateOne({'_id':req.params.email},
-        {'$pull':{'events':req.params.id}},function(err, result) {
-
-            if(err) return res.status(500).send(err);
-
-            console.log(result);
-
-            db.collection('events').removeOne({'_id': req.params.id },function(err,result) {
-
-                if(err) return res.status(500).send(err);
-
-                console.log(result);
-
-                res.send('ok');
-
-                db.close();
-            });
-        });
-    });
 });
 
 apiRoutes.get('/event/img/:event_id',function(req, res) {
 
-    console.log(req.params.event_id);
+    var cond = {'_id':mongo.ObjectID(req.params.event_id)};
+    var project = {'image':true,'_id':false};
+    db.collection('events').findOne(cond,project,function(err, result) {
 
-    MongoClient.connect(config.database, function(err, db) {
+        if(err) return handleError(err,500,res);
 
-        if(err) return res.status(500).send(err);
-
-        db.collection('events').findOne({'_id':mongo.ObjectID(req.params.event_id)},
-            {'image':true,'_id':false},function(err, result) {
-
-                if(err) return res.status(500).send({"message":err});
-
-                res.sendFile(__dirname+'/data/img/'+result.image);
-        });
+        res.sendFile(__dirname+'/data/img/'+result.image);
     });
 });
 
-apiRoutes.put('/event/img',upload.single('file'), function(req, res) {
 
-    var array = req.file.originalname.split('.');
-    var ext = '.' + array[array.length-1];
-    var name = new Date().getTime()+ext;
-
-    var file = __dirname + '/data/img/' + name;
-      fs.rename(req.file.path, file, function(err) {
-        if (err) {
-          console.log(err);
-          res.status(500).send({'message':err});
-        } else {
-
-            console.log(JSON.stringify({
-                message: 'File uploaded successfully',
-                filename: name
-            }).green);
-
-            res.json({
-                message: 'File uploaded successfully',
-                filename: name
-            });
-        }
-      });
-});
-
-//partecipazione
-apiRoutes.post('/event/participate/:event_id', function(req, res) {
-
-    MongoClient.connect(config.database, function(err, db) {
-
-        if(err) {
-
-            console.log(JSON.stringify(err).red);
-            return res.status(500).send(err);
-        }
-
-        var condition = {'_id':mongo.ObjectID(req.params.event_id)};
-
-        var update = {
-            '$addToSet': {
-                'user_participations':req.body.email
-            }
-        };
-
-        db.collection('events').updateOne(condition,update,function(err,result) {
-
-            if(err) {
-
-                console.log(JSON.stringify(err).red);
-                return res.status(500).send(err);
-            }
-
-            if(result.result.nModified === 0) {
-
-                err = {'message':'Partecipi già a questo evento'};
-                console.log(JSON.stringify(err).red);
-                res.send(err);
-
-            } else {
-
-                var aggregateCond = [
-                    {
-                        '$match' : condition
-                    },
-                    {
-                        '$project': {
-                            'participations': { $size: "$user_participations" }
-                        }
-                    }
-                ];
-
-                db.collection('events').aggregate(aggregateCond, function(err, result) {
-
-                    result[0].message = 'Evvai!, adesso partecipi a questo evento!';
-                    console.log(JSON.stringify(result).green);
-                    res.send(result[0]);
-                });
-            }
-        });
-    });
-});
-
-//togli la partecipazione
-apiRoutes.post('/event/notparticipate/:event_id', function(req, res) {
-
-    MongoClient.connect(config.database, function(err, db) {
-
-        if(err) {
-
-            console.log(JSON.stringify(err).red);
-            return res.status(500).send(err);
-        }
-
-        var condition = {'_id':mongo.ObjectID(req.params.event_id)};
-
-        var update = {
-            '$pull': {
-                'user_participations':req.body.email
-            }
-        };
-
-        db.collection('events').updateOne(condition,update,function(err,result) {
-
-            if(err) {
-
-                console.log(JSON.stringify(err).red);
-                return res.status(500).send(err);
-            }
-
-            if(result.result.nModified === 0) {
-
-                err = {'message':"Errore, non partecipi all'evento"};
-                console.log(JSON.stringify(err).red);
-                res.send(err);
-
-            } else {
-
-                var aggregateCond = [
-                    {
-                        '$match' : condition
-                    },
-                    {
-                        '$project': {
-                            'participations': { $size: "$user_participations" }
-                        }
-                    }
-                ];
-
-                db.collection('events').aggregate(aggregateCond, function(err, result) {
-
-                    result[0].message = 'Non partecipi più a questo evento!';
-                    console.log(JSON.stringify(result).green);
-                    res.send(result[0]);
-                });
-            }
-        });
-    });
-});
-
-//creazione dell'evento da parte del planner
 apiRoutes.put('/event/', function(req, res) {
 
-    var body = req.body;
+    var cond, update, body = req.body;
 
-    //get coordinate from address
     geocoder.geocode(body.address, function ( err, data ) {
 
-        if(err) res.status(500).send(err);
+        if(err) return handleError(err,500,res);
 
         var event = {
 
@@ -320,11 +175,15 @@ apiRoutes.put('/event/', function(req, res) {
             'tag' : body.tag,
             'description' : body.description,
             'start_date' : body.start_date,
-            'participations' : 0,
             'user_participations' : [],
             'image' : body.image,
-            'latitude' : data.results[0].geometry.location.lat,
-            'longitude' : data.results[0].geometry.location.lng,
+            'loc':{
+                type: "Point",
+                coordinates: [
+                    data.results[0].geometry.location.lng,
+                    data.results[0].geometry.location.lat
+                ]
+            },
             'author' : body.author,
             'price' : "FREE"
         };
@@ -342,36 +201,99 @@ apiRoutes.put('/event/', function(req, res) {
         if(body.tickets) event.tickets = body.tickets;
         if(body.price) event.price = body.price;
 
-        MongoClient.connect(config.database, function(err, db) {
+        db.collection('events').insertOne(event,function(err,result) {
 
-            if(err) return res.send(err);
+            if(err) return handleError(err,500,res);
 
-            db.collection('events').insertOne(event,function(err,result) {
+            cond = {'_id':event.author};
+            update = {'$push': {'events': event._id}};
+            db.collection('planners').updateOne(cond,update,function(err,result){
 
-                if(err) return res.send(err);
+                if(err) return handleError(err,500,res);
 
-                console.log(JSON.stringify(result).green);
-
-                db.collection('planners').updateOne({'_id':event.author},
-                    {'$push': {'events': event._id}},
-                    function(err,result){
-
-                        if(err){
-                            console.log(JSON.stringify(err.message).red);
-                            return res.status(406).send(err);
-                        }
-
-                        result = {
-                            'name':'ok',
-                            'message':result
-                        };
-
-                        console.log(JSON.stringify(event).green);
-                        res.send(event);
-
-                        db.close();
-                });
+                res.send(event);
             });
+        });
+    });
+});
+
+apiRoutes.put('/event/img',upload.single('file'), function(req, res) {
+
+    var array = req.file.originalname.split('.');
+    var ext = '.' + array[array.length-1];
+    var name = new Date().getTime()+ext;
+
+    var file = __dirname + '/data/img/' + name;
+    fs.rename(req.file.path, file, function(err) {
+
+        if(err) return handleError(err,500,res);
+
+        res.send({'filename':name});
+    });
+});
+
+
+apiRoutes.post('/event/participate/:event_id', function(req, res) {
+
+    var condition,update;
+
+    condition = {'_id':mongo.ObjectID(req.params.event_id)};
+    update = {'$addToSet': {'user_participations':req.body.email}};
+    db.collection('events').updateOne(condition,update,function(err,result) {
+
+        if(err) return handleError(err,500,res);
+
+        if(result.result.nModified === 0)
+            return handleError({'message':'Partecipi già a questo evento'},403,res);
+
+        condition = [{'$match' : condition},{'$project': {'participations': { $size: "$user_participations" }}}];
+        db.collection('events').aggregate(condition, function(err, result) {
+
+            result[0].message = 'Evvai!, adesso partecipi a questo evento!';
+            res.send(result[0]);
+        });
+    });
+});
+
+apiRoutes.post('/event/notparticipate/:event_id', function(req, res) {
+
+    var condition,update;
+
+    condition = {'_id':mongo.ObjectID(req.params.event_id)};
+    update = {'$pull': {'user_participations':req.body.email}};
+    db.collection('events').updateOne(condition,update,function(err,result) {
+
+        if(err) return handleError(err,500,res);
+
+        if(result.result.nModified === 0)
+            return handleError({'message':"Errore, non partecipi all'evento"},406,res);
+
+        condition = [{'$match' : condition},{'$project': {'participations': { $size: "$user_participations" }}}];
+        db.collection('events').aggregate(condition, function(err, result) {
+
+            result[0].message = 'Non partecipi più a questo evento!';
+            res.send(result[0]);
+        });
+    });
+});
+
+
+apiRoutes.delete('/event/:email/:id', function(req, res) {
+
+    var cond,update;
+
+    cond = {'_id':req.params.email};
+    update = {'$pull':{'events':req.params.id}};
+    db.collection('planners').updateOne(cond,update,function(err, result) {
+
+        if(err) return handleError(err,500,res);
+
+        cond = {'_id': req.params.id };
+        db.collection('events').removeOne(cond,function(err,result) {
+
+            if(err) return handleError(err,500,res);
+
+            res.send({'message':''});
         });
     });
 });
@@ -380,50 +302,47 @@ apiRoutes.put('/event/', function(req, res) {
 
 apiRoutes.get('/user',function(req,res){
 
-    MongoClient.connect(config.database, function(err, db) {
+    db.collection('users').find().toArray(function(err, result) {
 
-        if(err) return res.send(err);
+        if(err) return handleError(err,500,res);
 
-        db.collection('users').find().toArray(function(err, result) {
-
-            if(err) return res.send(err);
-
-            console.log(result);
-
-            res.send(result);
-
-            db.close();
-        });
+        res.send(result);
     });
 });
 
 apiRoutes.get('/user/:email',function(req,res){
 
+    var cond = {'_id':req.params.email};
+    db.collection('users').findOne(cond,function(err, result) {
+
+        if(err) return handleError(err,500,res);
+
+        if(!result.length)
+            return handleError({'message':'Utente non trovato'},404,res);
+
+        res.send(result);
+    });
+});
+
+apiRoutes.get('/user/img/:user_id',function(req, res) {
+
+    console.log(req.params.user_id);
+
     MongoClient.connect(config.database, function(err, db) {
 
-        if(err) return res.send(err);
+        if(err) return res.status(500).send(err);
 
-        db.collection('users').find({'_id':req.params.email}).toArray(function(err, result) {
+        db.collection('users').findOne({'_id':req.params.user_id},
+            {'image':true,'_id':false},function(err, result) {
 
-            if(err) return res.send(err);
+                if(err) return res.status(500).send({"message":err});
 
-            console.log(result);
-
-            if(result.length <= 0) {
-
-                res.status(404).send("Error, specific user not found");
-
-            } else {
-
-                res.send(result[0]);
-            }
-
-            db.close();
+                res.sendFile(__dirname+'/data/img/'+result.image);
         });
     });
 });
 
-//upload image user
+
 apiRoutes.put('/user/img/:user_id',upload.single('file'), function(req, res) {
 
     var array = req.file.originalname.split('.');
@@ -450,26 +369,31 @@ apiRoutes.put('/user/img/:user_id',upload.single('file'), function(req, res) {
       });
 });
 
-//download image user
-apiRoutes.get('/user/img/:user_id',function(req, res) {
+apiRoutes.put('/user',function(req, res) {
 
-    console.log(req.params.user_id);
+    //controllo se il client mi ha passato email e password
+    if(req.body.email && req.body.password){
 
-    MongoClient.connect(config.database, function(err, db) {
+        //imposto l'utente
+        var user = {
+            '_id' : req.body.email,
+            'password' : sha256(req.body.password),
+            'balance' : 0
+        };
 
-        if(err) return res.status(500).send(err);
+        //inserisco l'utente nella collection utenti
+        db.collection('users').insertOne(user,function(err, result) {
 
-        db.collection('users').findOne({'_id':req.params.user_id},
-            {'image':true,'_id':false},function(err, result) {
+            if(err) return handleError({'message':"Errore, l'email selezionata è già stata scelta."},406,res);
 
-                if(err) return res.status(500).send({"message":err});
-
-                res.sendFile(__dirname+'/data/img/'+result.image);
+            res.send({'message':'Inserimento completato con successo'});
         });
-    });
+    }
+
+    else return handleError({'message':'Errore, utente non trovato!'},406,res);
 });
 
-//login
+
 apiRoutes.post('/user',function(req,res){
 
     if(req.body.email && req.body.password){
@@ -519,7 +443,6 @@ apiRoutes.post('/user',function(req,res){
     }
 });
 
-//completamento profilo
 apiRoutes.post('/user/:email',function(req, res) {
 
     //TODO controllare se esiste un body
@@ -581,178 +504,33 @@ apiRoutes.post('/user/:email',function(req, res) {
 
 apiRoutes.post('/user/changepassword/:email', function(req, res) {
 
-    var body = req.body;
+    var body = req.body,
+        newPass = sha256(body.newPassword),
+        oldPass = sha256(body.oldPassword),
+        cond,update;
 
-    console.log(body);
+    if(!newPass || !oldPass && (newPass === oldPass))
+        return handleError({'message':'Password coincidenti'},403,res);
 
-    var newPass = sha256(body.newPassword);
-    var oldPass = sha256(body.oldPassword);
-
-    if(newPass && oldPass && (newPass != oldPass)) {
-
-        MongoClient.connect(config.database, function(err, db) {
-
-            if(err){
-
-                console.log(JSON.stringify(err.message).red);
-                return res.status(503).send(err);
-            }
-
-            var cond = {
-                '_id':req.params.email,
-                'password': oldPass
-            };
-
-            console.log(cond);
-
-            db.collection('users').findOne(cond, function(err, result) {
-
-                if(err){
-                    console.log(JSON.stringify(err.message).red);
-                    return res.status(406).send(err);
-                }
-
-                var update = {
-                    '$set': {'password': newPass}
-                };
-
-                console.log(result);
-
-                if(result) {
-
-                    db.collection('users').updateOne(cond,update,function(err,result){
-
-                        if(err){
-                            console.log(JSON.stringify(err.message).red);
-                            return res.status(406).send(err);
-                        }
-
-                        result = {
-                            'message':'Password cambiata con successo'
-                        };
-
-                        console.log(JSON.stringify(result).green);
-                        res.send(result);
-
-                        db.close();
-                    });
-                } else {
-                    err = {"message":"Password errata"};
-                    console.log(JSON.stringify(err).red);
-
-                    return res.status(404).send(err);
-                }
-            });
-        });
-
-    } else {
-
-        var err = {'message':'Errore, le password coincidono'};
-        console.log(JSON.stringify(err).red);
-        return res.status(503).send(err);
-    }
-});
-
-//registrazione utente
-apiRoutes.put('/user',function(req, res) {
-
-    //controllo se il client mi ha passato email e password
-    if(req.body.email && req.body.password){
-
-        //imposto l'utente
-        var user = {
-            '_id' : req.body.email,
-            'password' : sha256(req.body.password),
-            'balance' : 0
-        };
-
-        //inserisco l'utente nella collection utenti
-        db.collection('users').insertOne(user,function(err, result) {
-
-            if(err) return handleError({'message':"Errore, l'email selezionata è già stata scelta."},406,res);
-
-            res.send({'message':'Inserimento completato con successo'});
-        });
-    }
-
-    else return handleError({'message':'Errore, utente non trovato!'},406,res);
-});
-
-//RECORD------------------------------------------------------------------------
-
-apiRoutes.put('/records/:email', function(req,res) {
-
-    var condition = {},
-        update = {};
-    //creo il nuovo record da inserire nel database
-    //controllando se è un acquisto, in questo caso ha anche l'id dell'evento
-    var date = new Date().getTime();
-    var record = {
-        'date' : date,
-        'amount' : req.body.amount,
-        'type' : req.body.type,
-        'user' : req.params.email
-    };
-    if(req.body.event) record.event = req.body.event;
-
-    //cerco lo stesso record all'interno della collection record
-    condition = {'amount' : req.body.amount,'type' : req.body.type,'user' : req.params.email};
-    db.collection('records').findOne(condition,function(err, result) {
+    cond = {'_id':req.params.email,'password': oldPass};
+    db.collection('users').findOne(cond, function(err, result) {
 
         if(err) return handleError(err,500,res);
 
-        //se il record cercato è un acquisto di un biglietto
-        //e se la query indica che esiste già lo stesso risultato
-        //ritorno un errore, notificando l'acquisto già avvenuto
-        if(record.type === 'Acquisto biglietto' && result) {
+        if(!result) return handleError({'message':'Utente non trovato'},500,res);
 
-            if(err) return handleError({'message':'Biglietto già acquistato!'},403,res);
-        }
+        update = {'$set': {'password': newPass}};
+        db.collection('users').updateOne(cond,update,function(err,result){
 
-        //provo ad inserire il biglietto all'interno della collection records
-        db.collection('records').insertOne(record,function(err, result) {
+            if(err) return handleError(err,500,res);
 
-            if(err) return handleError(err,406,res);
-
-            //eseguo l'update del campo balance dell'utente scelto
-            condition = {'_id':record.user};
-            update = {'$inc':{'balance':parseFloat(record.amount)}};
-            db.collection('users').updateOne(condition,update,function(err,result) {
-
-                if(err) return handleError(err,406,res);
-
-                //se si tratta dell'acquisto di un biglietto
-                //aggiungo l'email dell'utente tra i partecipanti dell'evento
-                if(record.event && record.type === 'Acquisto biglietto') {
-
-                    var response = {'record': record};
-
-                    //aggiungo all'array delle partecipazioni, l'email dell'utente
-                    condition ={'_id':new mongo.ObjectID(record.event)};
-                    update = {'$push' : {'user_participations':record.user}};
-                    db.collection('events').updateOne(condition,update,function(err, result) {
-
-                        if(err) return handleError(err,406,res);
-
-                        //eseguo un aggregate per restituirmi la lunghezza dell'array delle partecipazioni
-                        condition = [{'$match' : condition},{'$project': {'participations': { $size: "$user_participations" }}}];
-                        db.collection('events').aggregate(condition, function(err, result) {
-
-                            response.message = 'Evvai!, adesso partecipi a questo evento!';
-                            response.participations = result[0].participations;
-                            res.send(response);
-                        });
-                    });
-
-                } else {
-
-                    console.log((result).green);
-                    res.send(record);
-                }
-            });
+            res.send({'message':'Password cambiata con successo'});
         });
     });
 });
+
+
+//RECORD------------------------------------------------------------------------
 
 apiRoutes.get('/records/:email', function(req,res) {
 
@@ -831,152 +609,189 @@ apiRoutes.get('/tickets/:email', function(req, res) {
     });
 });
 
-//PLANNER-----------------------------------------------------------------------
 
-apiRoutes.put('/planners/register', function(req,res) {
+apiRoutes.put('/records/:email', function(req,res) {
 
-    if(req.body.email && req.body.password){
+    var condition = {},
+        update = {};
+    //creo il nuovo record da inserire nel database
+    //controllando se è un acquisto, in questo caso ha anche l'id dell'evento
+    var date = new Date().getTime();
+    var record = {
+        'date' : date,
+        'amount' : req.body.amount,
+        'type' : req.body.type,
+        'user' : req.params.email
+    };
+    if(req.body.event) record.event = req.body.event;
 
-        MongoClient.connect(config.database, function(err, db) {
+    //cerco lo stesso record all'interno della collection record
+    condition = {'amount' : req.body.amount,'type' : req.body.type,'user' : req.params.email};
+    db.collection('records').findOne(condition,function(err, result) {
 
-            if(err){
+        if(err) return handleError(err,500,res);
 
-                console.log(JSON.stringify(err.message).red);
-                return res.status(503).send(err);
-            }
+        //se il record cercato è un acquisto di un biglietto
+        //e se la query indica che esiste già lo stesso risultato
+        //ritorno un errore, notificando l'acquisto già avvenuto
+        if(record.type === 'Acquisto biglietto' && result) {
 
-            var planner = {
-                '_id' : req.body.email,
-                'password' : sha256(req.body.password),
-                'events' : [],
-                'balance' : 0
-            };
-
-            console.log('found = ' + JSON.stringify(planner).green);
-
-            db.collection('planners').insertOne(planner,function(err, result) {
-
-                if(err){
-                    console.log(JSON.stringify(err.message).red);
-                    return res.status(406).send(err);
-                }
-
-                result = {
-                    'name':'ok',
-                    'message':'Inserimento completato con successo'
-                };
-
-                console.log(JSON.stringify(result).green);
-                res.send(result);
-
-                db.close();
-            });
-        });
-    }else {
-        var err = {'name':'Planner not found','message':'Error, planner not found in body'};
-
-        console.log(JSON.stringify(err.message).red);
-        return res.status(406).send(err);
-    }
-});
-
-apiRoutes.post('/planners/authenticate',function(req,res) {
-
-    if(req.body.email && req.body.password){
-
-        MongoClient.connect(config.database, function(err, db) {
-
-            if(err){
-
-                console.log(JSON.stringify(err.message).red);
-                return res.status(503).send(err);
-            }
-
-            var cond = {
-                '_id' : req.body.email,
-                'password' : sha256(req.body.password)
-            };
-
-            console.log('found = ' + JSON.stringify(cond).green);
-
-            db.collection('planners').findOne(cond, function(err, result) {
-
-                if(err){
-                    console.log(JSON.stringify(err.message).red);
-                    return res.status(406).send(err);
-                }
-
-                if(result){
-
-                    console.log(JSON.stringify(result).green);
-                    res.send(result);
-                }else{
-
-                    var error = {'name':'Planner not found','message':'Error, planner not found in database'};
-                    console.log(JSON.stringify(error).red);
-
-                    res.status(404).send(error);
-                }
-
-                db.close();
-            });
-        });
-    }else {
-        var err = {'name':'Planner not found','message':'Error, planner not found in headers'};
-
-        console.log(JSON.stringify(err.message).red);
-        return res.status(406).send(err);
-    }
-});
-
-//upload immagine profilo planner
-apiRoutes.put('/planners/img/:planner_id',upload.single('file'),
-    function(req, res) {
-
-    var array = req.file.originalname.split('.');
-    var ext = '.' + array[array.length-1];
-    var name = req.params.planner_id + ext;
-
-    var file = __dirname + '/data/img/' + name;
-      fs.rename(req.file.path, file, function(err) {
-        if (err) {
-          console.log(err);
-          res.status(500).send({'message':err});
-        } else {
-
-            console.log(JSON.stringify({
-                message: 'File uploaded successfully',
-                filename: name
-            }).green);
-
-            res.json({
-                message: 'File uploaded successfully',
-                filename: name
-            });
+            if(err) return handleError({'message':'Biglietto già acquistato!'},403,res);
         }
-      });
-});
 
-//download immagine profilo planner
-apiRoutes.get('/planners/img/:planner_id',function(req, res) {
+        //provo ad inserire il biglietto all'interno della collection records
+        db.collection('records').insertOne(record,function(err, result) {
 
-    console.log(req.params.planner_id);
+            if(err) return handleError(err,406,res);
 
-    MongoClient.connect(config.database, function(err, db) {
+            //eseguo l'update del campo balance dell'utente scelto
+            condition = {'_id':record.user};
+            update = {'$inc':{'balance':parseFloat(record.amount)}};
+            db.collection('users').updateOne(condition,update,function(err,result) {
 
-        if(err) return res.status(500).send(err);
+                if(err) return handleError(err,406,res);
 
-        db.collection('planners').findOne({'_id':req.params.planner_id},
-            {'image':true,'_id':false},function(err, result) {
+                //se si tratta dell'acquisto di un biglietto
+                //aggiungo l'email dell'utente tra i partecipanti dell'evento
+                if(record.event && record.type === 'Acquisto biglietto') {
 
-                if(err) return res.status(500).send({"message":err});
+                    var response = {'record': record};
 
-                res.sendFile(__dirname+'/data/img/'+result.image);
+                    //aggiungo all'array delle partecipazioni, l'email dell'utente
+                    condition ={'_id':new mongo.ObjectID(record.event)};
+                    update = {'$push' : {'user_participations':record.user}};
+                    db.collection('events').updateOne(condition,update,function(err, result) {
+
+                        if(err) return handleError(err,406,res);
+
+                        //eseguo un aggregate per restituirmi la lunghezza dell'array delle partecipazioni
+                        condition = [{'$match' : condition},{'$project': {'participations': { $size: "$user_participations" }}}];
+                        db.collection('events').aggregate(condition, function(err, result) {
+
+                            response.message = 'Evvai!, adesso partecipi a questo evento!';
+                            response.participations = result[0].participations;
+                            res.send(response);
+                        });
+                    });
+
+                } else {
+
+                    console.log((result).green);
+                    res.send(record);
+                }
+            });
         });
     });
 });
 
-//completamento profilo planner
+
+//PLANNER-----------------------------------------------------------------------
+
+
+apiRoutes.get('/planners/img/:planner_id',function(req, res) {
+
+    var cond = {'_id':req.params.planner_id},
+        proj = {'image':true,'_id':false};
+    db.collection('planners').findOne(cond,proj,function(err, result) {
+
+        if(err) return handleError(err,500,res);
+
+        res.sendFile(__dirname+'/data/img/'+result.image);
+    });
+});
+
+apiRoutes.get('/planners/:email', function(req,res) {
+
+    var cond = {'_id':req.params.email};
+    db.collection('planners').findOne(cond,function(err, result) {
+
+        if(err) return handleError(err,500,res);
+
+        if(!result) handleError({'message':'Utente non trovato'},404,res);
+
+        res.send(result);
+    });
+});
+
+apiRoutes.get('/planners/event/:planner_email', function(req, res) {
+
+    var cond,project;
+
+    //cerco la lista di id degli eventi di un planner
+    cond = {'_id':req.params.planner_email};
+    project = {'events':true,'_id':false};
+
+    db.collection('planners').findOne(cond,project,function(err, result) {
+
+        if(err) return handleError(err,500,res);
+
+        if(!result) return handleError({'message':'Non è possibile completare la richiesta'},403,res);
+
+        //cerco tutti gli eventi di quel planner
+        cond = {'_id': { '$in' : result.events}};
+        db.collection('events').find(cond).toArray(function(err,result) {
+
+            if(err) return handleError(err,500,res);
+
+            if(result.length === 0) return handleError({'message':'Eventi non trovati'},404,res);
+
+            res.send(result);
+        });
+    });
+});
+
+
+apiRoutes.put('/planners/register', function(req,res) {
+
+    if(!req.body.email || !req.body.password)
+        return handleError({'message':'Inserire email e password'},403,res);
+
+    var planner = {
+        '_id' : req.body.email,
+        'password' : sha256(req.body.password),
+        'events' : [],
+        'balance' : 0
+    };
+    db.collection('planners').insertOne(planner,function(err, result) {
+
+        if(err) return handleError(err,403,res);
+
+        res.send({'message':'Inserimento completato con successo'});
+    });
+});
+
+apiRoutes.put('/planners/img/:planner_id',upload.single('file'),function(req, res) {
+
+    var array = req.file.originalname.split('.');
+    var name = req.params.planner_id + '.' + array[array.length-1];
+
+    var file = __dirname + '/data/img/' + name;
+    fs.rename(req.file.path, file, function(err) {
+
+        if(err) return handleError(err,500,res);
+
+        res.send({filename: name});
+    });
+});
+
+
+apiRoutes.post('/planners/authenticate',function(req,res) {
+
+    var cond;
+    if(!req.body.email || !req.body.password)
+        return handleError({'message':'Inserire email e password'},403,res);
+
+    cond = {'_id' : req.body.email,'password' : sha256(req.body.password)};
+    db.collection('planners').findOne(cond, function(err, result) {
+
+        if(err) return handleError(err,500,res);
+
+        if(!result) return handleError({'message':'Utente non trovato'},404,res);
+
+        res.send(result);
+    });
+});
+
 apiRoutes.post('/planners/:email', function(req,res) {
 
     var body = req.body;
@@ -1034,74 +849,15 @@ apiRoutes.post('/planners/:email', function(req,res) {
     });
 });
 
-apiRoutes.get('/planners/:email', function(req,res) {
-
-    MongoClient.connect(config.database, function(err, db) {
-
-        if(err) return res.send(err);
-
-        db.collection('planners').find({'_id':req.params.email}).toArray(function(err, result) {
-
-            if(err) return res.send(err);
-
-            console.log(result);
-
-            if(result.length <= 0) {
-
-                res.status(404).send({"message":"Error, specific planner not found"});
-
-            } else {
-
-                res.send(result[0]);
-            }
-
-            db.close();
-        });
-    });
-});
 
 apiRoutes.delete('/planners/:email', function(req,res) {
 
-    MongoClient.connect(config.database, function(err, db) {
-
-        if(err) return res.send(err);
-
-        db.collection('planners').deleteOne({'_id':req.params.email},function(err, result) {
-
-            if(err) return res.send(err);
-
-            console.log(result);
-
-            res.send(result);
-
-            db.close();
-        });
-    });
-});
-
-//lista di eventi creati dal planner
-apiRoutes.get('/planners/event/:planner_email', function(req, res) {
-
-    var cond,project;
-
-    //cerco la lista di id degli eventi di un planner
-    cond = {'_id':req.params.planner_email};
-    project = {'events':true,'_id':false};
-
-    db.collection('planners').findOne(cond,project,function(err, result) {
+    var cond = {'_id':req.params.email};
+    db.collection('planners').deleteOne(cond,function(err, result) {
 
         if(err) return handleError(err,500,res);
 
-        //cerco tutti gli eventi di quel planner
-        cond = {'_id': { '$in' : result.events}};
-        db.collection('events').find(cond).toArray(function(err,result) {
-
-            if(err) return handleError(err,500,res);
-
-            if(result.length === 0) return handleError({'message':'Eventi non trovati'},500,res);
-
-            res.send(result);
-        });
+        res.send(result);
     });
 });
 
