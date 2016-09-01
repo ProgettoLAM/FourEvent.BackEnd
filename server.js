@@ -21,6 +21,7 @@ var jwt    = require('jsonwebtoken');
 
 //file di config con la passphrase e database
 var config = require('./config');
+var keys = require('./keys');
 
 //porta settata
 var port = process.env.PORT || 8080;
@@ -99,7 +100,7 @@ apiRoutes.get('/event/:email', function(req, res) {
                     }
                 ];
 
-                db.collection('events').aggregate(cond,function(err,result) {
+                db.collection(keys.EVENT).aggregate(cond,function(err,result) {
 
                     if(err) return handleError(err,500,res);
 
@@ -117,7 +118,7 @@ apiRoutes.get('/event/:email', function(req, res) {
 
             cond = {'_id':req.params.email};
             project = {'categories.name':1,'_id':0};
-            db.collection('users').findOne(cond,project,function(err, result) {
+            db.collection(keys.USER).findOne(cond,project,function(err, result) {
 
                 if(err) return handleError(err,500,res);
 
@@ -128,7 +129,7 @@ apiRoutes.get('/event/:email', function(req, res) {
                 }
 
                 cond = {'tag':{'$in':tmpCat}};
-                db.collection('events').find(cond).toArray(function(err, result) {
+                db.collection(keys.EVENT).find(cond).toArray(function(err, result) {
 
                     if(err) return handleError(err,500,res);
 
@@ -152,7 +153,7 @@ apiRoutes.get('/event/img/:event_id',function(req, res) {
 
     var cond = {'_id':mongo.ObjectID(req.params.event_id)};
     var project = {'image':true,'_id':false};
-    db.collection('events').findOne(cond,project,function(err, result) {
+    db.collection(keys.EVENT).findOne(cond,project,function(err, result) {
 
         if(err) return handleError(err,500,res);
 
@@ -201,13 +202,13 @@ apiRoutes.put('/event/', function(req, res) {
         if(body.tickets) event.tickets = body.tickets;
         if(body.price) event.price = body.price;
 
-        db.collection('events').insertOne(event,function(err,result) {
+        db.collection(keys.EVENT).insertOne(event,function(err,result) {
 
             if(err) return handleError(err,500,res);
 
             cond = {'_id':event.author};
             update = {'$push': {'events': event._id}};
-            db.collection('planners').updateOne(cond,update,function(err,result){
+            db.collection(keys.PLANNER).updateOne(cond,update,function(err,result){
 
                 if(err) return handleError(err,500,res);
 
@@ -239,7 +240,7 @@ apiRoutes.post('/event/participate/:event_id', function(req, res) {
 
     condition = {'_id':mongo.ObjectID(req.params.event_id)};
     update = {'$addToSet': {'user_participations':req.body.email}};
-    db.collection('events').updateOne(condition,update,function(err,result) {
+    db.collection(keys.EVENT).updateOne(condition,update,function(err,result) {
 
         if(err) return handleError(err,500,res);
 
@@ -247,7 +248,7 @@ apiRoutes.post('/event/participate/:event_id', function(req, res) {
             return handleError({'message':'Partecipi già a questo evento'},403,res);
 
         condition = [{'$match' : condition},{'$project': {'participations': { $size: "$user_participations" }}}];
-        db.collection('events').aggregate(condition, function(err, result) {
+        db.collection(keys.EVENT).aggregate(condition, function(err, result) {
 
             result[0].message = 'Evvai!, adesso partecipi a questo evento!';
             res.send(result[0]);
@@ -261,7 +262,7 @@ apiRoutes.post('/event/notparticipate/:event_id', function(req, res) {
 
     condition = {'_id':mongo.ObjectID(req.params.event_id)};
     update = {'$pull': {'user_participations':req.body.email}};
-    db.collection('events').updateOne(condition,update,function(err,result) {
+    db.collection(keys.EVENT).updateOne(condition,update,function(err,result) {
 
         if(err) return handleError(err,500,res);
 
@@ -269,7 +270,7 @@ apiRoutes.post('/event/notparticipate/:event_id', function(req, res) {
             return handleError({'message':"Errore, non partecipi all'evento"},406,res);
 
         condition = [{'$match' : condition},{'$project': {'participations': { $size: "$user_participations" }}}];
-        db.collection('events').aggregate(condition, function(err, result) {
+        db.collection(keys.EVENT).aggregate(condition, function(err, result) {
 
             result[0].message = 'Non partecipi più a questo evento!';
             res.send(result[0]);
@@ -284,12 +285,15 @@ apiRoutes.delete('/event/:email/:id', function(req, res) {
 
     cond = {'_id':req.params.email};
     update = {'$pull':{'events':mongo.ObjectID(req.params.id)}};
-    db.collection('planners').updateOne(cond,update,function(err, result) {
+    db.collection(keys.PLANNER).updateOne(cond,update,function(err, result) {
 
         if(err) return handleError(err,500,res);
 
+        if(result.result.n === 0)
+            return handleError({'message':"Non hai i permessi per completare l'operazione"},403,res);
+
         cond = {'_id': mongo.ObjectID(req.params.id)};
-        db.collection('events').removeOne(cond,function(err,result) {
+        db.collection(keys.EVENT).removeOne(cond,function(err,result) {
 
             if(err) return handleError(err,500,res);
 
@@ -304,7 +308,7 @@ apiRoutes.delete('/event/:email/:id', function(req, res) {
 
 apiRoutes.get('/user',function(req,res){
 
-    db.collection('users').find().toArray(function(err, result) {
+    db.collection(keys.USER).find().toArray(function(err, result) {
 
         if(err) return handleError(err,500,res);
 
@@ -315,7 +319,7 @@ apiRoutes.get('/user',function(req,res){
 apiRoutes.get('/user/:email',function(req,res){
 
     var cond = {'_id':req.params.email};
-    db.collection('users').findOne(cond,function(err, result) {
+    db.collection(keys.USER).findOne(cond,function(err, result) {
 
         if(err) return handleError(err,500,res);
 
@@ -334,7 +338,7 @@ apiRoutes.get('/user/img/:user_id',function(req, res) {
 
         if(err) return res.status(500).send(err);
 
-        db.collection('users').findOne({'_id':req.params.user_id},
+        db.collection(keys.USER).findOne({'_id':req.params.user_id},
             {'image':true,'_id':false},function(err, result) {
 
                 if(err) return res.status(500).send({"message":err});
@@ -384,7 +388,7 @@ apiRoutes.put('/user',function(req, res) {
         };
 
         //inserisco l'utente nella collection utenti
-        db.collection('users').insertOne(user,function(err, result) {
+        db.collection(keys.USER).insertOne(user,function(err, result) {
 
             if(err) return handleError({'message':"Errore, l'email selezionata è già stata scelta."},406,res);
 
@@ -398,51 +402,16 @@ apiRoutes.put('/user',function(req, res) {
 
 apiRoutes.post('/user',function(req,res){
 
-    if(req.body.email && req.body.password){
+    if(!req.body.email || !req.body.password)
+        return handleError({'message':'Utente non trovato'},403,res);
 
-        MongoClient.connect(config.database, function(err, db) {
+    var cond = {'_id' : req.body.email,'password' : sha256(req.body.password)};
+    db.collection(keys.USER).findOne(cond, function(err, result) {
 
-            if(err){
+        if(err) return handleError(err,500,res);
 
-                console.log(JSON.stringify(err.message).red);
-                return res.status(503).send(err);
-            }
-
-            var cond = {
-                '_id' : req.body.email,
-                'password' : sha256(req.body.password)
-            };
-
-            console.log('found = ' + JSON.stringify(cond).green);
-
-            db.collection('users').findOne(cond, function(err, result) {
-
-                if(err){
-                    console.log(JSON.stringify(err.message).red);
-                    return res.status(406).send(err);
-                }
-
-                if(result){
-
-                    console.log(JSON.stringify(result).green);
-                    res.send(result);
-                }else{
-
-                    var error = {'name':'User not found','message':'Error, user not found in database'};
-                    console.log(JSON.stringify(error).red);
-
-                    res.status(404).send(error);
-                }
-
-                db.close();
-            });
-        });
-    }else {
-        var err = {'name':'User not found','message':'Error, user not found in headers'};
-
-        console.log(JSON.stringify(err.message).red);
-        return res.status(406).send(err);
-    }
+        res.send(result);
+    });
 });
 
 apiRoutes.post('/user/:email',function(req, res) {
@@ -480,7 +449,7 @@ apiRoutes.post('/user/:email',function(req, res) {
         console.log(element);
         console.log(cond);
 
-        db.collection('users').updateOne(cond,
+        db.collection(keys.USER).updateOne(cond,
             {
                 '$set': element
             },
@@ -515,14 +484,14 @@ apiRoutes.post('/user/changepassword/:email', function(req, res) {
         return handleError({'message':'Password coincidenti'},403,res);
 
     cond = {'_id':req.params.email,'password': oldPass};
-    db.collection('users').findOne(cond, function(err, result) {
+    db.collection(keys.USER).findOne(cond, function(err, result) {
 
         if(err) return handleError(err,500,res);
 
         if(!result) return handleError({'message':'Utente non trovato'},500,res);
 
         update = {'$set': {'password': newPass}};
-        db.collection('users').updateOne(cond,update,function(err,result){
+        db.collection(keys.USER).updateOne(cond,update,function(err,result){
 
             if(err) return handleError(err,500,res);
 
@@ -539,7 +508,7 @@ apiRoutes.get('/records/:email', function(req,res) {
     var cond;
 
     cond = {'user':req.params.email};
-    db.collection('records').find(cond).toArray(function(err,result) {
+    db.collection(keys.RECORD).find(cond).toArray(function(err,result) {
 
         if(err) return handleError(err,500,res);
 
@@ -554,7 +523,7 @@ apiRoutes.get('/records/:email', function(req,res) {
             if(record.type === "Acquisto biglietto") {
 
                 cond = {'_id':mongo.ObjectID(record.event)};
-                db.collection('events').findOne(cond,function(err,result) {
+                db.collection(keys.EVENT).findOne(cond,function(err,result) {
 
                     if(err) return handleError(err,500,res);
 
@@ -582,7 +551,7 @@ apiRoutes.get('/tickets/:email', function(req, res) {
 
     //cerco tutti i record che indicano l'acquisto di un biglietto
     cond = {'user':req.params.email,'type':'Acquisto biglietto'};
-    db.collection('records').find(cond).toArray(function(err,result) {
+    db.collection(keys.RECORD).find(cond).toArray(function(err,result) {
 
         if(err) return handleError(err, 500, res);
 
@@ -596,7 +565,7 @@ apiRoutes.get('/tickets/:email', function(req, res) {
 
             console.log(ticket.event);
             cond = {'_id':mongo.ObjectID(ticket.event)};
-            db.collection('events').findOne(cond,function(err,result) {
+            db.collection(keys.EVENT).findOne(cond,function(err,result) {
 
                 if(err) return handleError(err,500,res);
 
@@ -629,7 +598,7 @@ apiRoutes.put('/records/:email', function(req,res) {
 
     //cerco lo stesso record all'interno della collection record
     condition = {'amount' : req.body.amount,'type' : req.body.type,'user' : req.params.email};
-    db.collection('records').findOne(condition,function(err, result) {
+    db.collection(keys.RECORD).findOne(condition,function(err, result) {
 
         if(err) return handleError(err,500,res);
 
@@ -642,14 +611,14 @@ apiRoutes.put('/records/:email', function(req,res) {
         }
 
         //provo ad inserire il biglietto all'interno della collection records
-        db.collection('records').insertOne(record,function(err, result) {
+        db.collection(keys.RECORD).insertOne(record,function(err, result) {
 
             if(err) return handleError(err,406,res);
 
             //eseguo l'update del campo balance dell'utente scelto
             condition = {'_id':record.user};
             update = {'$inc':{'balance':parseFloat(record.amount)}};
-            db.collection('users').updateOne(condition,update,function(err,result) {
+            db.collection(keys.USER).updateOne(condition,update,function(err,result) {
 
                 if(err) return handleError(err,406,res);
 
@@ -662,13 +631,13 @@ apiRoutes.put('/records/:email', function(req,res) {
                     //aggiungo all'array delle partecipazioni, l'email dell'utente
                     condition ={'_id':new mongo.ObjectID(record.event)};
                     update = {'$push' : {'user_participations':record.user}};
-                    db.collection('events').updateOne(condition,update,function(err, result) {
+                    db.collection(keys.EVENT).updateOne(condition,update,function(err, result) {
 
                         if(err) return handleError(err,406,res);
 
                         //eseguo un aggregate per restituirmi la lunghezza dell'array delle partecipazioni
                         condition = [{'$match' : condition},{'$project': {'participations': { $size: "$user_participations" }}}];
-                        db.collection('events').aggregate(condition, function(err, result) {
+                        db.collection(keys.EVENT).aggregate(condition, function(err, result) {
 
                             response.message = 'Evvai!, adesso partecipi a questo evento!';
                             response.participations = result[0].participations;
@@ -694,7 +663,7 @@ apiRoutes.get('/planners/img/:planner_id',function(req, res) {
 
     var cond = {'_id':req.params.planner_id},
         proj = {'image':true,'_id':false};
-    db.collection('planners').findOne(cond,proj,function(err, result) {
+    db.collection(keys.PLANNER).findOne(cond,proj,function(err, result) {
 
         if(err) return handleError(err,500,res);
 
@@ -705,7 +674,7 @@ apiRoutes.get('/planners/img/:planner_id',function(req, res) {
 apiRoutes.get('/planners/:email', function(req,res) {
 
     var cond = {'_id':req.params.email};
-    db.collection('planners').findOne(cond,function(err, result) {
+    db.collection(keys.PLANNER).findOne(cond,function(err, result) {
 
         if(err) return handleError(err,500,res);
 
@@ -723,7 +692,7 @@ apiRoutes.get('/planners/event/:planner_email', function(req, res) {
     cond = {'_id':req.params.planner_email};
     project = {'events':true,'_id':false};
 
-    db.collection('planners').findOne(cond,project,function(err, result) {
+    db.collection(keys.PLANNER).findOne(cond,project,function(err, result) {
 
         if(err) return handleError(err,500,res);
 
@@ -731,7 +700,7 @@ apiRoutes.get('/planners/event/:planner_email', function(req, res) {
 
         //cerco tutti gli eventi di quel planner
         cond = {'_id': { '$in' : result.events}};
-        db.collection('events').find(cond).toArray(function(err,result) {
+        db.collection(keys.EVENT).find(cond).toArray(function(err,result) {
 
             if(err) return handleError(err,500,res);
 
@@ -754,7 +723,7 @@ apiRoutes.put('/planners/register', function(req,res) {
         'events' : [],
         'balance' : 0
     };
-    db.collection('planners').insertOne(planner,function(err, result) {
+    db.collection(keys.PLANNER).insertOne(planner,function(err, result) {
 
         if(err) return handleError(err,403,res);
 
@@ -784,7 +753,7 @@ apiRoutes.post('/planners/authenticate',function(req,res) {
         return handleError({'message':'Inserire email e password'},403,res);
 
     cond = {'_id' : req.body.email,'password' : sha256(req.body.password)};
-    db.collection('planners').findOne(cond, function(err, result) {
+    db.collection(keys.PLANNER).findOne(cond, function(err, result) {
 
         if(err) return handleError(err,500,res);
 
@@ -827,7 +796,7 @@ apiRoutes.post('/planners/:email', function(req,res) {
         console.log(element);
         console.log(cond);
 
-        db.collection('planners').updateOne(cond,
+        db.collection(keys.PLANNER).updateOne(cond,
             {
                 '$set': element
             },
@@ -851,11 +820,41 @@ apiRoutes.post('/planners/:email', function(req,res) {
     });
 });
 
+apiRoutes.post('/planners/changepassword/:email', function(req, res) {
+
+    if(!req.body.newPassword || !req.body.oldPassword)
+        return handleError({'message':'Password non trovate'},404,res);
+
+    var body = req.body,
+        newPass = sha256(body.newPassword),
+        oldPass = sha256(body.oldPassword),
+        cond,update;
+
+    if(newPass === oldPass)
+        return handleError({'message':'Password coincidenti o non trovate'},403,res);
+
+    cond = {'_id':req.params.email,'password': oldPass};
+    db.collection(keys.PLANNER).findOne(cond, function(err, result) {
+
+        if(err) return handleError(err,500,res);
+
+        if(!result) return handleError({'message':'password non coincidente'},500,res);
+
+        update = {'$set': {'password': newPass}};
+        db.collection(keys.PLANNER).updateOne(cond,update,function(err,result){
+
+            if(err) return handleError(err,500,res);
+
+            res.send({'message':'Password cambiata con successo'});
+        });
+    });
+});
+
 
 apiRoutes.delete('/planners/:email', function(req,res) {
 
     var cond = {'_id':req.params.email};
-    db.collection('planners').deleteOne(cond,function(err, result) {
+    db.collection(keys.PLANNER).deleteOne(cond,function(err, result) {
 
         if(err) return handleError(err,500,res);
 
