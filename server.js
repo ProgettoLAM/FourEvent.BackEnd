@@ -503,7 +503,7 @@ apiRoutes.post('/user/changepassword/:email', function(req, res) {
 
 //RECORD------------------------------------------------------------------------
 
-apiRoutes.get('/records/:email', function(req,res) {
+apiRoutes.get('/record/:email', function(req,res) {
 
     var cond;
 
@@ -581,10 +581,10 @@ apiRoutes.get('/tickets/:email', function(req, res) {
 });
 
 
-apiRoutes.put('/records/:email', function(req,res) {
+apiRoutes.put('/record/:email', function(req,res) {
 
-    var condition = {},
-        update = {};
+    var condition,
+        update;
     //creo il nuovo record da inserire nel database
     //controllando se è un acquisto, in questo caso ha anche l'id dell'evento
     var date = new Date().getTime();
@@ -655,7 +655,37 @@ apiRoutes.put('/records/:email', function(req,res) {
     });
 });
 
+apiRoutes.put('/record/planners/:email', function(req,res) {
 
+    var condition,update,project;
+    //creo il nuovo record da inserire nel database
+    //controllando se è un acquisto, in questo caso ha anche l'id dell'evento
+    var date = new Date().getTime();
+    var record = {
+        'date' : date,
+        'amount' : req.body.amount,
+        'type' : req.body.type,
+        'user' : req.params.email
+    };
+    if(req.body.event) record.event = req.body.event;
+
+    db.collection(keys.RECORD).insertOne(record,function(err, result) {
+
+        if(err) return handleError(err,406,res);
+
+        //eseguo l'update del campo balance dell'utente scelto
+        condition = {'_id':record.user};
+        update = {'$inc':{'balance':parseFloat(record.amount)}};
+        db.collection(keys.PLANNER).updateOne(condition,update,function(err,result) {
+
+            if(err) return handleError(err,406,res);
+
+            if(result.result.nModified === 0) return handleError({'message':'Operazione non conclusa'},406,res);
+
+            res.send(record);
+        });
+    });
+});
 //PLANNER-----------------------------------------------------------------------
 
 
@@ -850,6 +880,90 @@ apiRoutes.post('/planners/changepassword/:email', function(req, res) {
     });
 });
 
+apiRoutes.post('/planners/maxticket/:email', function(req,res) {
+
+    var cond,update,
+        date = new Date().getTime(),
+        record = {
+            'date' : date,
+            'amount' : req.body.amount,
+            'type' : req.body.type,
+            'user' : req.params.email,
+            'event' : req.body.event
+        };
+
+    cond = {'_id':record.user};
+    update = {'$inc':{'balance':parseInt(record.amount)}};
+    db.collection(keys.PLANNER).updateOne(cond,update,function(err,result) {
+
+        if(err) return handleError(err,500,res);
+
+        if(result.result.nModified === 0)
+            return handleError({'message':'Non è possibile effettuare il decremento del bilancio'},500,res);
+
+        db.collection(keys.RECORD).insertOne(record, function(err,result) {
+
+            if(err) return handleError(err,500,res);
+
+            cond = {'_id':mongo.ObjectID(record.event)};
+            update = {'$set':{'tickets':req.body.newMax}};
+            db.collection(keys.EVENT).updateOne(cond,update,function(err,result) {
+
+                if(err) return handleError(err,500,res);
+
+                if(result.result.nModified === 0)
+                    return handleError({'message':"Non è possibile effettuare l'incremento di biglietti"},500,res);
+
+                res.send({'message':'Corretto!'});
+            });
+        });
+    });
+});
+
+apiRoutes.post('/planners/favourite/:email', function(req,res) {
+
+    var cond,update,
+        date = new Date().getTime(),
+        record = {
+            'date' : date,
+            'amount' : req.body.amount,
+            'type' : req.body.type,
+            'user' : req.params.email,
+            'event' : req.body.event
+        };
+
+    cond = {'_id':record.user};
+    update = {'$inc':{'balance':parseInt(record.amount)}};
+    db.collection(keys.PLANNER).updateOne(cond,update,function(err,result) {
+
+        if(err) return handleError(err,500,res);
+
+        if(result.result.nModified === 0)
+            return handleError({'message':'Non è possibile effettuare il decremento del bilancio'},500,res);
+
+        db.collection(keys.RECORD).insertOne(record, function(err,result) {
+
+            if(err) return handleError(err,500,res);
+
+            cond = {'_id':mongo.ObjectID(record.event)};
+            update = {'$set':{'favourite':'true'}};
+            db.collection(keys.EVENT).updateOne(cond,update,function(err,result) {
+
+                if(err) return handleError(err,500,res);
+
+                if(result.result.nModified === 0)
+                    return handleError({'message':"Non è possibile pubblicizzare l'evento richiesto"},500,res);
+
+                res.send({'message':'Corretto!'});
+            });
+        });
+    });
+});
+
+apiRoutes.post('/planners/sendmessage/:email', function(req,res) {
+
+
+});
 
 apiRoutes.delete('/planners/:email', function(req,res) {
 
@@ -862,6 +976,22 @@ apiRoutes.delete('/planners/:email', function(req,res) {
     });
 });
 
+/*
+apiRoutes.post('/planners/detail/:event_id', function(req,res) {
+
+    switch (req.query.type) {
+        case "tickets":
+
+            var maxTicket = req.query.max,
+                cond,
+
+
+            break;
+        default:
+
+    }
+});
+*/
 //------------------------------------------------------------------------------
 
 app.use('/api', apiRoutes);
