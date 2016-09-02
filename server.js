@@ -580,6 +580,28 @@ apiRoutes.get('/tickets/:email', function(req, res) {
     });
 });
 
+apiRoutes.get('/ticket/:id', function(req, res) {
+
+    var cond, record;
+
+    //cerco tutti i record che indicano l'acquisto di un biglietto
+    cond = {'_id':mongo.ObjectID(req.params.id)};
+    db.collection(keys.RECORD).findOne(cond,function(err,result) {
+
+        if(err) return handleError(err, 500, res);
+
+        if(!result) return handleError({'message':'Biglietto non trovato'},404,res);
+
+        var record = result;
+        cond = {'_id':mongo.ObjectID(result.event)};
+        db.collection(keys.EVENT).findOne(cond,function(err,result) {
+
+            if(err) return handleError(err, 500, res);
+
+            res.send(record);
+        });
+    });
+});
 
 apiRoutes.put('/record/:email', function(req,res) {
 
@@ -686,8 +708,8 @@ apiRoutes.put('/record/planners/:email', function(req,res) {
         });
     });
 });
-//PLANNER-----------------------------------------------------------------------
 
+//PLANNER-----------------------------------------------------------------------
 
 apiRoutes.get('/planners/img/:planner_id',function(req, res) {
 
