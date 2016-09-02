@@ -3,5 +3,6 @@ module.exports = {
     USER: 'users',
     RECORD: 'records',
     TICKET: 'tickets',
-    PLANNER: 'planners'
+    PLANNER: 'planners',
+    ASSETS_DIR: __dirname+'/data/img/'
 };

@@ -7,7 +7,7 @@ var colors = require('colors');
 var sha256 = require('sha256');
 var geocoder = require('geocoder');
 var multer = require('multer');
-
+var qr = require('qr-image');
 
 var bodyParser  = require('body-parser');
 var morgan      = require('morgan');
@@ -323,7 +323,7 @@ apiRoutes.get('/user/:email',function(req,res){
 
         if(err) return handleError(err,500,res);
 
-        if(!result.length)
+        if(!result)
             return handleError({'message':'Utente non trovato'},404,res);
 
         res.send(result);
@@ -545,7 +545,7 @@ apiRoutes.get('/record/:email', function(req,res) {
     });
 });
 
-apiRoutes.get('/tickets/:email', function(req, res) {
+apiRoutes.get('/ticket/:email', function(req, res) {
 
     var cond;
 
@@ -580,7 +580,7 @@ apiRoutes.get('/tickets/:email', function(req, res) {
     });
 });
 
-apiRoutes.get('/ticket/:id', function(req, res) {
+apiRoutes.get('/ticket/tag/:id', function(req, res) {
 
     var cond, record;
 
@@ -602,6 +602,12 @@ apiRoutes.get('/ticket/:id', function(req, res) {
         });
     });
 });
+
+apiRoutes.get('/ticket/qr/:id', function(req,res) {
+
+
+});
+
 
 apiRoutes.put('/record/:email', function(req,res) {
 
@@ -661,6 +667,14 @@ apiRoutes.put('/record/:email', function(req,res) {
                         condition = [{'$match' : condition},{'$project': {'participations': { $size: "$user_participations" }}}];
                         db.collection(keys.EVENT).aggregate(condition, function(err, result) {
 
+                            /*
+                            var imageName = 'qr_'+req.params.id+'.png',
+                                imagePath = keys.ASSETS_DIR+'qr/'+imageName,
+                                qr_svg = qr.image(req.params.id, { type: 'png' });
+
+                            qr_svg.pipe(fs.createWriteStream(imagePath));
+                            */
+
                             response.message = 'Evvai!, adesso partecipi a questo evento!';
                             response.participations = result[0].participations;
                             res.send(response);
@@ -711,7 +725,7 @@ apiRoutes.put('/record/planners/:email', function(req,res) {
 
 //PLANNER-----------------------------------------------------------------------
 
-apiRoutes.get('/planners/img/:planner_id',function(req, res) {
+apiRoutes.get('/planner/img/:planner_id',function(req, res) {
 
     var cond = {'_id':req.params.planner_id},
         proj = {'image':true,'_id':false};
@@ -723,7 +737,7 @@ apiRoutes.get('/planners/img/:planner_id',function(req, res) {
     });
 });
 
-apiRoutes.get('/planners/:email', function(req,res) {
+apiRoutes.get('/planner/:email', function(req,res) {
 
     var cond = {'_id':req.params.email};
     db.collection(keys.PLANNER).findOne(cond,function(err, result) {
@@ -736,7 +750,7 @@ apiRoutes.get('/planners/:email', function(req,res) {
     });
 });
 
-apiRoutes.get('/planners/event/:planner_email', function(req, res) {
+apiRoutes.get('/planner/event/:planner_email', function(req, res) {
 
     var cond,project;
 
@@ -764,7 +778,7 @@ apiRoutes.get('/planners/event/:planner_email', function(req, res) {
 });
 
 
-apiRoutes.put('/planners/register', function(req,res) {
+apiRoutes.put('/planner/register', function(req,res) {
 
     if(!req.body.email || !req.body.password)
         return handleError({'message':'Inserire email e password'},403,res);
@@ -783,7 +797,7 @@ apiRoutes.put('/planners/register', function(req,res) {
     });
 });
 
-apiRoutes.put('/planners/img/:planner_id',upload.single('file'),function(req, res) {
+apiRoutes.put('/planner/img/:planner_id',upload.single('file'),function(req, res) {
 
     var array = req.file.originalname.split('.');
     var name = req.params.planner_id + '.' + array[array.length-1];
@@ -798,7 +812,7 @@ apiRoutes.put('/planners/img/:planner_id',upload.single('file'),function(req, re
 });
 
 
-apiRoutes.post('/planners/authenticate',function(req,res) {
+apiRoutes.post('/planner/authenticate',function(req,res) {
 
     var cond;
     if(!req.body.email || !req.body.password)
@@ -815,7 +829,7 @@ apiRoutes.post('/planners/authenticate',function(req,res) {
     });
 });
 
-apiRoutes.post('/planners/:email', function(req,res) {
+apiRoutes.post('/planner/:email', function(req,res) {
 
     var body = req.body;
 
@@ -872,7 +886,7 @@ apiRoutes.post('/planners/:email', function(req,res) {
     });
 });
 
-apiRoutes.post('/planners/changepassword/:email', function(req, res) {
+apiRoutes.post('/planner/changepassword/:email', function(req, res) {
 
     if(!req.body.newPassword || !req.body.oldPassword)
         return handleError({'message':'Password non trovate'},404,res);
@@ -902,7 +916,7 @@ apiRoutes.post('/planners/changepassword/:email', function(req, res) {
     });
 });
 
-apiRoutes.post('/planners/maxticket/:email', function(req,res) {
+apiRoutes.post('/planner/maxticket/:email', function(req,res) {
 
     var cond,update,
         date = new Date().getTime(),
@@ -942,7 +956,7 @@ apiRoutes.post('/planners/maxticket/:email', function(req,res) {
     });
 });
 
-apiRoutes.post('/planners/favourite/:email', function(req,res) {
+apiRoutes.post('/planner/favourite/:email', function(req,res) {
 
     var cond,update,
         date = new Date().getTime(),
@@ -982,7 +996,7 @@ apiRoutes.post('/planners/favourite/:email', function(req,res) {
     });
 });
 
-apiRoutes.post('/planners/sendmessage/:email', function(req,res) {
+apiRoutes.post('/planner/sendmessage/:email', function(req,res) {
 
 
 });
