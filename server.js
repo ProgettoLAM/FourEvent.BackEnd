@@ -133,7 +133,7 @@ apiRoutes.get('/event/:email', function(req, res) {
 
                     if(err) return handleError(err,500,res);
 
-                    if(result.length === 0) return handleError({'message':'Eventi non trovati!'},404,res);
+                    if(result.length === 0) return handleError({'message':'Eventi non trovati'},404,res);
 
                     res.send(checkParticipation(result,req.params.email));
                 });
@@ -142,7 +142,17 @@ apiRoutes.get('/event/:email', function(req, res) {
 
         case "popular":
 
-            return handleError({'message':'Non ci sono eventi popolari'},404,res);
+            cond = {'popular':true};
+            db.collection(keys.EVENT).find(cond).toArray(function(err,result) {
+
+                if(err) return handleError(err,500,res);
+
+                if(result.length === 0) return handleError({'message':'Non ci sono eventi popolari'},404,res);
+
+                res.send(checkParticipation(result,req.params.email));
+            });
+
+            break;
 
         default:
             return handleError({'message':'tipo non trovato'},404,res);
@@ -157,7 +167,7 @@ apiRoutes.get('/event/img/:event_id',function(req, res) {
 
         if(err) return handleError(err,500,res);
 
-        res.sendFile(__dirname+'/data/img/'+result.image);
+        res.sendFile(__dirname+'/data/img/'+result.image+'.png');
     });
 });
 
@@ -189,6 +199,10 @@ apiRoutes.put('/event/', function(req, res) {
             'price' : "FREE"
         };
 
+
+        var totalAddress = data.results[0].formatted_address.split(",");
+        event.street_address = totalAddress[0]+', '+totalAddress[1];
+
         data.results[0].address_components.forEach(function(component) {
 
             if(component.types[0] === 'locality') {
@@ -218,18 +232,17 @@ apiRoutes.put('/event/', function(req, res) {
     });
 });
 
-apiRoutes.put('/event/img',upload.single('file'), function(req, res) {
+apiRoutes.put('/event/img/:name',upload.single('file'), function(req, res) {
 
     var array = req.file.originalname.split('.');
-    var ext = '.' + array[array.length-1];
-    var name = new Date().getTime()+ext;
+    var name = req.params.name + '.' + array[array.length-1];
 
     var file = __dirname + '/data/img/' + name;
     fs.rename(req.file.path, file, function(err) {
 
         if(err) return handleError(err,500,res);
 
-        res.send({'filename':name});
+        res.send({'filename':req.params.name});
     });
 });
 
@@ -332,19 +345,15 @@ apiRoutes.get('/user/:email',function(req,res){
 
 apiRoutes.get('/user/img/:user_id',function(req, res) {
 
-    console.log(req.params.user_id);
+    var cond = {'_id':req.params.user_id},
+        proj = {'_id':true};
+    db.collection(keys.USER).findOne(cond,proj,function(err, result) {
 
-    MongoClient.connect(config.database, function(err, db) {
+        if(err) return handleError(err,500,res);
 
-        if(err) return res.status(500).send(err);
+        if(!result) return handleError({'message':'Utente non trovato'},404,res);
 
-        db.collection(keys.USER).findOne({'_id':req.params.user_id},
-            {'image':true,'_id':false},function(err, result) {
-
-                if(err) return res.status(500).send({"message":err});
-
-                res.sendFile(__dirname+'/data/img/'+result.image);
-        });
+        res.sendFile(__dirname+'/data/img/'+result.image);
     });
 });
 
@@ -352,27 +361,15 @@ apiRoutes.get('/user/img/:user_id',function(req, res) {
 apiRoutes.put('/user/img/:user_id',upload.single('file'), function(req, res) {
 
     var array = req.file.originalname.split('.');
-    var ext = '.' + array[array.length-1];
-    var name = req.params.user_id + ext;
+    var name = req.params.user_id + '.' + array[array.length-1];
 
     var file = __dirname + '/data/img/' + name;
-      fs.rename(req.file.path, file, function(err) {
-        if (err) {
-          console.log(err);
-          res.status(500).send({'message':err});
-        } else {
+    fs.rename(req.file.path, file, function(err) {
 
-            console.log(JSON.stringify({
-                message : 'File uploaded successfully',
-                filename : name
-            }).green);
+        if(err) return handleError(err,500,res);
 
-            res.json({
-                message: 'File uploaded successfully',
-                filename: name
-            });
-        }
-      });
+        res.send({'filename': name});
+    });
 });
 
 apiRoutes.put('/user',function(req, res) {
@@ -390,7 +387,7 @@ apiRoutes.put('/user',function(req, res) {
         //inserisco l'utente nella collection utenti
         db.collection(keys.USER).insertOne(user,function(err, result) {
 
-            if(err) return handleError({'message':"Errore, l'email selezionata è già stata scelta."},406,res);
+            if(err) return handleError({'message':"Errore, email già esistente"},406,res);
 
             res.send({'message':'Inserimento completato con successo'});
         });
@@ -438,7 +435,7 @@ apiRoutes.post('/user/:email',function(req, res) {
 
         if(body.gender) element.gender = body.gender;
 
-        if(body.birthDate) element.birthDate = body.birthDate;
+        if(body.birth_date) element.birth_date = body.birth_date;
 
         if(body.categories) element.categories = body.categories;
 
@@ -481,7 +478,7 @@ apiRoutes.post('/user/changepassword/:email', function(req, res) {
         cond,update;
 
     if(!newPass || !oldPass && (newPass === oldPass))
-        return handleError({'message':'Password coincidenti'},403,res);
+        return handleError({'message':'Le due password coincidono'},403,res);
 
     cond = {'_id':req.params.email,'password': oldPass};
     db.collection(keys.USER).findOne(cond, function(err, result) {
@@ -526,6 +523,9 @@ apiRoutes.get('/record/:email', function(req,res) {
                 db.collection(keys.EVENT).findOne(cond,function(err,result) {
 
                     if(err) return handleError(err,500,res);
+
+                    if(!result)
+                        return handleError({'message':'Evento non trovato'},404,res);
 
                     record.event = result.title;
 
@@ -691,7 +691,7 @@ apiRoutes.put('/record/:email', function(req,res) {
     });
 });
 
-apiRoutes.put('/record/planners/:email', function(req,res) {
+apiRoutes.put('/record/planner/:email', function(req,res) {
 
     var condition,update,project;
     //creo il nuovo record da inserire nel database
@@ -725,15 +725,19 @@ apiRoutes.put('/record/planners/:email', function(req,res) {
 
 //PLANNER-----------------------------------------------------------------------
 
+
+
 apiRoutes.get('/planner/img/:planner_id',function(req, res) {
 
     var cond = {'_id':req.params.planner_id},
-        proj = {'image':true,'_id':false};
+        proj = {'_id':false};
     db.collection(keys.PLANNER).findOne(cond,proj,function(err, result) {
 
         if(err) return handleError(err,500,res);
 
-        res.sendFile(__dirname+'/data/img/'+result.image);
+        if(!result) return handleError({'message':'Utente non trovato'},404,res);
+
+        res.sendFile(__dirname+'/data/img/'+result._id);
     });
 });
 
@@ -777,6 +781,58 @@ apiRoutes.get('/planner/event/:planner_email', function(req, res) {
     });
 });
 
+apiRoutes.get('/planner/detail/:event_id', function(req,res) {
+
+    var response, proj, aggregate, cond = {_id:mongo.ObjectID(req.params.event_id)};
+    db.collection(keys.EVENT).findOne(cond,function(err,result) {
+
+        if(err) return handleError(err,500,res);
+
+        if(!result)
+            return handleError({'message':'Evento non trovato'},404,res);
+
+        response = result;
+
+        cond = {'_id': { '$in' : result.user_participations}};
+        aggregate = [
+            {$match:cond},
+            {
+                $group:{
+                    _id:'$gender',count:{$sum:1}
+                }
+            }
+        ];
+        db.collection(keys.USER).aggregate(aggregate,function(err,result) {
+
+            if(err) return handleError(err,500,res);
+
+            if(!result)
+                return handleError({'message':'Utenti non trovati'},404,res);
+
+            response.gender_stats = result;
+
+            proj = {_id:0,birth_date:1};
+            db.collection(keys.USER).find(cond,proj).toArray(function(err,result) {
+
+                if(err) return handleError(err,500,res);
+
+                if(!result)
+                    return handleError({'message':'Utenti non trovati'},404,res);
+
+                var dates = [], today = new Date();
+                for(var element in result){
+
+                    dates.push(getAge(element));
+                }
+
+                response.ages = dates;
+                res.send(response);
+            });
+        });
+
+    });
+});
+
 
 apiRoutes.put('/planner/register', function(req,res) {
 
@@ -807,7 +863,7 @@ apiRoutes.put('/planner/img/:planner_id',upload.single('file'),function(req, res
 
         if(err) return handleError(err,500,res);
 
-        res.send({filename: name});
+        res.send({'filename': name});
     });
 });
 
@@ -897,7 +953,7 @@ apiRoutes.post('/planner/changepassword/:email', function(req, res) {
         cond,update;
 
     if(newPass === oldPass)
-        return handleError({'message':'Password coincidenti o non trovate'},403,res);
+        return handleError({'message':'Le password coincidono'},403,res);
 
     cond = {'_id':req.params.email,'password': oldPass};
     db.collection(keys.PLANNER).findOne(cond, function(err, result) {
@@ -956,7 +1012,7 @@ apiRoutes.post('/planner/maxticket/:email', function(req,res) {
     });
 });
 
-apiRoutes.post('/planner/favourite/:email', function(req,res) {
+apiRoutes.post('/planner/popular/:email', function(req,res) {
 
     var cond,update,
         date = new Date().getTime(),
@@ -982,7 +1038,7 @@ apiRoutes.post('/planner/favourite/:email', function(req,res) {
             if(err) return handleError(err,500,res);
 
             cond = {'_id':mongo.ObjectID(record.event)};
-            update = {'$set':{'favourite':'true'}};
+            update = {'$set':{'popular':true}};
             db.collection(keys.EVENT).updateOne(cond,update,function(err,result) {
 
                 if(err) return handleError(err,500,res);
@@ -1001,6 +1057,7 @@ apiRoutes.post('/planner/sendmessage/:email', function(req,res) {
 
 });
 
+
 apiRoutes.delete('/planners/:email', function(req,res) {
 
     var cond = {'_id':req.params.email};
@@ -1012,22 +1069,19 @@ apiRoutes.delete('/planners/:email', function(req,res) {
     });
 });
 
-/*
-apiRoutes.post('/planners/detail/:event_id', function(req,res) {
-
-    switch (req.query.type) {
-        case "tickets":
-
-            var maxTicket = req.query.max,
-                cond,
-
-
-            break;
-        default:
-
+function getAge(dateString)
+{
+    var today = new Date();
+    var birthDate = new Date(dateString);
+    var age = today.getFullYear() - birthDate.getFullYear();
+    var m = today.getMonth() - birthDate.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate()))
+    {
+        age--;
     }
-});
-*/
+    return age;
+}
+
 //------------------------------------------------------------------------------
 
 app.use('/api', apiRoutes);
