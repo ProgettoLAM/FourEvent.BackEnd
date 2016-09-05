@@ -588,8 +588,8 @@ apiRoutes.get('/ticket/:email', function(req, res) {
 
 apiRoutes.get('/ticket/tag/:id', function(req, res) {
 
-    var cond, record, update, event, proj;
-    cond = {'_id':mongo.ObjectID(req.params.id)};
+    var record, update, proj,
+        cond = {_id:mongo.ObjectID(req.params.id)};
     db.collection(keys.RECORD).findOne(cond,function(err,result) {
 
         if(err) return handleError(err, 500, res);
@@ -597,24 +597,21 @@ apiRoutes.get('/ticket/tag/:id', function(req, res) {
         if(!result)
             return handleError({'message':'Il biglietto non corrisponde a nessun biglietto esistente'},404,res);
 
-        event = result.event;
-        cond = {_id:result.user};
-        db.collection(keys.USER).findOne(cond,function(err,result) {
+        cond = {_id:mongo.ObjectID(result.event)};
+        update = {$addToSet:{user_checked:result.user}};
+        db.collection(keys.EVENT).updateOne(cond,update,function(err,result) {
 
             if(err) return handleError(err, 500, res);
 
-            if(!result)
-                return handleError({'message':"Non è stato possibile trovare l'utente proprietario del biglietto"},404,res);
+            if(result.nModified === 0)
+                return handleError({'message':'Hai già usato questo biglietto!'},403,res);
 
-            cond = {_id:mongo.ObjectID(event)};
-            update = {$push:{user_checked:result.user}};
-            db.collection(keys.EVENT).updateOne(cond,update,function(err,result) {
+            proj = {user_checked:1,_id:0};
+            db.collection(keys.EVENT).findOne(cond,proj,function(err,result) {
 
                 if(err) return handleError(err, 500, res);
 
-                //TODO restituire il numero di partecipanti effettivi all'evento, per fare l'update
-                //TODO usare un aggregate di mongodb
-                res.send(result);
+                res.send(result.user_checked);
             });
         });
     });
