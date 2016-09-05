@@ -8,6 +8,7 @@ var sha256 = require('sha256');
 var geocoder = require('geocoder');
 var multer = require('multer');
 var qr = require('qr-image');
+var gcm = require('node-gcm');
 
 var bodyParser  = require('body-parser');
 var morgan      = require('morgan');
@@ -187,6 +188,7 @@ apiRoutes.put('/event/', function(req, res) {
             'description' : body.description,
             'start_date' : body.start_date,
             'user_participations' : [],
+            'user_checked' : [],
             'image' : body.image,
             'loc':{
                 type: "Point",
@@ -196,7 +198,7 @@ apiRoutes.put('/event/', function(req, res) {
                 ]
             },
             'author' : body.author,
-            'price' : "FREE"
+            'price' : "FREE",
         };
 
 
@@ -381,6 +383,7 @@ apiRoutes.put('/user',function(req, res) {
         var user = {
             '_id' : req.body.email,
             'password' : sha256(req.body.password),
+            'gcm_token' : req.body.gcm_token,
             'balance' : 0
         };
 
@@ -512,7 +515,7 @@ apiRoutes.get('/record/:email', function(req,res) {
         var recordsLeft = result.length;
         var onComplete = function() { res.send(result); };
 
-        if(recordsLeft === 0)
+        if(recordsLeft.length === 0)
             return handleError({'message':'Errore, record non trovati'},404,res);
 
         result.forEach(function(record) {
@@ -524,10 +527,13 @@ apiRoutes.get('/record/:email', function(req,res) {
 
                     if(err) return handleError(err,500,res);
 
-                    if(!result)
-                        return handleError({'message':'Evento non trovato'},404,res);
+                    if(result) {
 
-                    record.event = result.title;
+                        record.event = result.title;
+
+                    } else {
+                        console.log({'message':'Evento non trovato'}.red);
+                    }
 
                     if(--recordsLeft === 0) {
 
@@ -582,30 +588,36 @@ apiRoutes.get('/ticket/:email', function(req, res) {
 
 apiRoutes.get('/ticket/tag/:id', function(req, res) {
 
-    var cond, record;
-
-    //cerco tutti i record che indicano l'acquisto di un biglietto
+    var cond, record, update, event, proj;
     cond = {'_id':mongo.ObjectID(req.params.id)};
     db.collection(keys.RECORD).findOne(cond,function(err,result) {
 
         if(err) return handleError(err, 500, res);
 
-        if(!result) return handleError({'message':'Biglietto non trovato'},404,res);
+        if(!result)
+            return handleError({'message':'Il biglietto non corrisponde a nessun biglietto esistente'},404,res);
 
-        var record = result;
-        cond = {'_id':mongo.ObjectID(result.event)};
-        db.collection(keys.EVENT).findOne(cond,function(err,result) {
+        event = result.event;
+        cond = {_id:result.user};
+        db.collection(keys.USER).findOne(cond,function(err,result) {
 
             if(err) return handleError(err, 500, res);
 
-            res.send(record);
+            if(!result)
+                return handleError({'message':"Non è stato possibile trovare l'utente proprietario del biglietto"},404,res);
+
+            cond = {_id:mongo.ObjectID(event)};
+            update = {$push:{user_checked:result.user}};
+            db.collection(keys.EVENT).updateOne(cond,update,function(err,result) {
+
+                if(err) return handleError(err, 500, res);
+
+                //TODO restituire il numero di partecipanti effettivi all'evento, per fare l'update
+                //TODO usare un aggregate di mongodb
+                res.send(result);
+            });
         });
     });
-});
-
-apiRoutes.get('/ticket/qr/:id', function(req,res) {
-
-
 });
 
 
@@ -1052,9 +1064,48 @@ apiRoutes.post('/planner/popular/:email', function(req,res) {
     });
 });
 
-apiRoutes.post('/planner/sendmessage/:email', function(req,res) {
+apiRoutes.post('/planner/sendmessage/:event', function(req,res) {
 
+    var proj = {_id:0,user_participations:1,title:1},
+        cond = {_id:mongo.ObjectID(req.params.event)},
+        text = req.body.text;
+    db.collection(keys.EVENT).findOne(cond,proj,function(err,result) {
 
+        if(err) return handleError(err,500,res);
+
+        if(!result)
+            return handleError({'message':'Evento non trovati'},404,res);
+
+        var users = result.user_participations,
+            cond = {'_id': { '$in' : users}},
+            proj = {_id:0,gcm_token:1},
+            title = result.title;
+        db.collection(keys.USER).find(cond,proj).toArray(function(err,result) {
+
+            if(err) return handleError(err,500,res);
+
+            if(result.length === 0)
+                return handleError({'message':'Utenti non trovati'},404,res);
+
+            var sender = new gcm.Sender(config.gcm_key), regTokens = [];
+            for(var i=0; i<result.length; i++) {
+                regTokens.push(result[i].gcm_token);
+            }
+
+            var message = new gcm.Message({
+                data: {
+                    title : 'Notifica da : ' + title,
+                    message: text
+                }
+            });
+
+            sender.send(message, { registrationTokens: regTokens }, function (err, response) {
+                if(err) return handleError(err,500,res);
+
+                res.send({'message':'messaggio inviato con successo!'});
+            });
+        });
+    });
 });
 
 
@@ -1088,7 +1139,8 @@ app.use('/api', apiRoutes);
 
 function handleError(err,status,res) {
 
-    console.log(JSON.stringify(err.message).red);
+    if(err.message)
+        console.log(JSON.stringify(err.message).red);
     return res.status(status).send(err);
 }
 
