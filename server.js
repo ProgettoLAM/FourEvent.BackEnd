@@ -611,7 +611,7 @@ apiRoutes.get('/ticket/tag/:id', function(req, res) {
 
                 if(err) return handleError(err, 500, res);
 
-                res.send(result.user_checked);
+                res.send(result);
             });
         });
     });
