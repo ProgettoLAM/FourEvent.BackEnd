@@ -74,7 +74,8 @@ function checkParticipation(result,email) {
 
 apiRoutes.get('/event/:email', function(req, res) {
 
-    var cond, project;
+    var cond, project, now = Date.now();
+    console.log(now);
     switch (req.query.type) {
         case "near":
 
@@ -97,7 +98,7 @@ apiRoutes.get('/event/:email', function(req, res) {
                          }
                     },
                     {
-                         "$sort": {"distance": 1} // Sort the nearest first
+                         "$sort": {"distance": -1} // Sort the nearest first
                     }
                 ];
 
@@ -144,6 +145,7 @@ apiRoutes.get('/event/:email', function(req, res) {
         case "popular":
 
             cond = {'popular':true};
+            console.log(cond);
             db.collection(keys.EVENT).find(cond).toArray(function(err,result) {
 
                 if(err) return handleError(err,500,res);
@@ -248,7 +250,6 @@ apiRoutes.put('/event/img/:name',upload.single('file'), function(req, res) {
     });
 });
 
-
 apiRoutes.post('/event/participate/:event_id', function(req, res) {
 
     var condition,update;
@@ -265,7 +266,7 @@ apiRoutes.post('/event/participate/:event_id', function(req, res) {
         condition = [{'$match' : condition},{'$project': {'participations': { $size: "$user_participations" }}}];
         db.collection(keys.EVENT).aggregate(condition, function(err, result) {
 
-            result[0].message = 'Evvai!, adesso partecipi a questo evento!';
+            result[0].message = 'Evvai! Adesso partecipi a questo evento';
             res.send(result[0]);
         });
     });
@@ -292,7 +293,6 @@ apiRoutes.post('/event/notparticipate/:event_id', function(req, res) {
         });
     });
 });
-
 
 apiRoutes.delete('/event/:email/:id', function(req, res) {
 
@@ -399,7 +399,6 @@ apiRoutes.put('/user',function(req, res) {
     else return handleError({'message':'Errore, utente non trovato!'},406,res);
 });
 
-
 apiRoutes.post('/user',function(req,res){
 
     if(!req.body.email || !req.body.password)
@@ -481,14 +480,14 @@ apiRoutes.post('/user/changepassword/:email', function(req, res) {
         cond,update;
 
     if(!newPass || !oldPass && (newPass === oldPass))
-        return handleError({'message':'Le due password coincidono'},403,res);
+        return handleError({'message':'Errore, le due password coincidono!'},403,res);
 
     cond = {'_id':req.params.email,'password': oldPass};
     db.collection(keys.USER).findOne(cond, function(err, result) {
 
         if(err) return handleError(err,500,res);
 
-        if(!result) return handleError({'message':'Utente non trovato'},500,res);
+        if(!result) return handleError({'message':'La password non corrisponde a quella attuale'},500,res);
 
         update = {'$set': {'password': newPass}};
         db.collection(keys.USER).updateOne(cond,update,function(err,result){
@@ -595,7 +594,7 @@ apiRoutes.get('/ticket/tag/:id', function(req, res) {
         if(err) return handleError(err, 500, res);
 
         if(!result)
-            return handleError({'message':'Il biglietto non corrisponde a nessun biglietto esistente'},404,res);
+            return handleError({'message':'Il biglietto non è presente tra quelli esistenti!'},404,res);
 
         cond = {_id:mongo.ObjectID(result.event)};
         update = {$addToSet:{user_checked:result.user}};
@@ -616,7 +615,6 @@ apiRoutes.get('/ticket/tag/:id', function(req, res) {
         });
     });
 });
-
 
 apiRoutes.put('/record/:email', function(req,res) {
 
@@ -684,7 +682,7 @@ apiRoutes.put('/record/:email', function(req,res) {
                             qr_svg.pipe(fs.createWriteStream(imagePath));
                             */
 
-                            response.message = 'Evvai!, adesso partecipi a questo evento!';
+                            response.message = 'Evvai! Adesso partecipi a questo evento';
                             response.participations = result[0].participations;
                             res.send(response);
                         });
@@ -738,16 +736,7 @@ apiRoutes.put('/record/planner/:email', function(req,res) {
 
 apiRoutes.get('/planner/img/:planner_id',function(req, res) {
 
-    var cond = {'_id':req.params.planner_id},
-        proj = {'_id':false};
-    db.collection(keys.PLANNER).findOne(cond,proj,function(err, result) {
-
-        if(err) return handleError(err,500,res);
-
-        if(!result) return handleError({'message':'Utente non trovato'},404,res);
-
-        res.sendFile(__dirname+'/data/img/'+result._id);
-    });
+    res.sendFile(__dirname+'/data/img/'+req.params.planner_id+'.png');
 });
 
 apiRoutes.get('/planner/:email', function(req,res) {
@@ -828,10 +817,11 @@ apiRoutes.get('/planner/detail/:event_id', function(req,res) {
                 if(!result)
                     return handleError({'message':'Utenti non trovati'},404,res);
 
-                var dates = [], today = new Date();
-                for(var element in result){
+                var dates = [];
+                for(var i=0; i<result.length; i++){
 
-                    dates.push(getAge(element));
+                    console.log(result[i].birth_date);
+                    dates.push(_calculateAge(result[i].birth_date));
                 }
 
                 response.ages = dates;
@@ -841,7 +831,6 @@ apiRoutes.get('/planner/detail/:event_id', function(req,res) {
 
     });
 });
-
 
 apiRoutes.put('/planner/register', function(req,res) {
 
@@ -856,7 +845,7 @@ apiRoutes.put('/planner/register', function(req,res) {
     };
     db.collection(keys.PLANNER).insertOne(planner,function(err, result) {
 
-        if(err) return handleError(err,403,res);
+        if(err) return handleError({'message':"Errore, email già esistente"},406,res);
 
         res.send({'message':'Inserimento completato con successo'});
     });
@@ -914,7 +903,7 @@ apiRoutes.post('/planner/:email', function(req,res) {
 
         if(body.gender) element.gender = body.gender;
 
-        if(body.birthDate) element.birthDate = body.birthDate;
+        if(body.birth_date) element.birth_date = body.birth_date;
 
         if(body.categories) element.categories = body.categories;
 
@@ -962,14 +951,14 @@ apiRoutes.post('/planner/changepassword/:email', function(req, res) {
         cond,update;
 
     if(newPass === oldPass)
-        return handleError({'message':'Le password coincidono'},403,res);
+        return handleError({'message':'Errore, le due password coincidono!'},403,res);
 
     cond = {'_id':req.params.email,'password': oldPass};
     db.collection(keys.PLANNER).findOne(cond, function(err, result) {
 
         if(err) return handleError(err,500,res);
 
-        if(!result) return handleError({'message':'password non coincidente'},500,res);
+        if(!result) return handleError({'message':'La password non corrisponde a quella attuale'},500,res);
 
         update = {'$set': {'password': newPass}};
         db.collection(keys.PLANNER).updateOne(cond,update,function(err,result){
@@ -1013,7 +1002,7 @@ apiRoutes.post('/planner/maxticket/:email', function(req,res) {
                 if(err) return handleError(err,500,res);
 
                 if(result.result.nModified === 0)
-                    return handleError({'message':"Non è possibile effettuare l'incremento di biglietti"},500,res);
+                    return handleError({'message':"Non è possibile effettuare l'incremento dei biglietti"},500,res);
 
                 res.send({'message':'Corretto!'});
             });
@@ -1053,9 +1042,9 @@ apiRoutes.post('/planner/popular/:email', function(req,res) {
                 if(err) return handleError(err,500,res);
 
                 if(result.result.nModified === 0)
-                    return handleError({'message':"Non è possibile pubblicizzare l'evento richiesto"},500,res);
+                    return handleError({'message':"L'evento è già tra i popolari!"},500,res);
 
-                res.send({'message':'Corretto!'});
+                res.send({'message':'Evento inserito tra i popolari!'});
             });
         });
     });
@@ -1071,7 +1060,7 @@ apiRoutes.post('/planner/sendmessage/:event', function(req,res) {
         if(err) return handleError(err,500,res);
 
         if(!result)
-            return handleError({'message':'Evento non trovati'},404,res);
+            return handleError({'message':'Eventi non trovati'},404,res);
 
         var users = result.user_participations,
             cond = {'_id': { '$in' : users}},
@@ -1099,14 +1088,13 @@ apiRoutes.post('/planner/sendmessage/:event', function(req,res) {
             sender.send(message, { registrationTokens: regTokens }, function (err, response) {
                 if(err) return handleError(err,500,res);
 
-                res.send({'message':'messaggio inviato con successo!'});
+                res.send({'message':'Messaggio inviato con successo!'});
             });
         });
     });
 });
 
-
-apiRoutes.delete('/planners/:email', function(req,res) {
+apiRoutes.delete('/planner/:email', function(req,res) {
 
     var cond = {'_id':req.params.email};
     db.collection(keys.PLANNER).deleteOne(cond,function(err, result) {
@@ -1117,17 +1105,10 @@ apiRoutes.delete('/planners/:email', function(req,res) {
     });
 });
 
-function getAge(dateString)
-{
-    var today = new Date();
-    var birthDate = new Date(dateString);
-    var age = today.getFullYear() - birthDate.getFullYear();
-    var m = today.getMonth() - birthDate.getMonth();
-    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate()))
-    {
-        age--;
-    }
-    return age;
+function _calculateAge(birthday) { // birthday is a date
+    var ageDifMs = Date.now() - birthday;
+    var ageDate = new Date(ageDifMs); // miliseconds from epoch
+    return Math.abs(ageDate.getUTCFullYear() - 1970);
 }
 
 //------------------------------------------------------------------------------
