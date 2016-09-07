@@ -596,6 +596,7 @@ apiRoutes.get('/ticket/tag/:id', function(req, res) {
         if(!result)
             return handleError({'message':'Il biglietto non è presente tra quelli esistenti!'},404,res);
 
+        //TODO aggiungere parametro nella condizione, se l'user è dentro users
         cond = {_id:mongo.ObjectID(result.event)};
         update = {$addToSet:{user_checked:result.user}};
         db.collection(keys.EVENT).updateOne(cond,update,function(err,result) {
@@ -885,58 +886,24 @@ apiRoutes.post('/planner/authenticate',function(req,res) {
 
 apiRoutes.post('/planner/:email', function(req,res) {
 
-    var body = req.body;
+    var update, cond;
+    var planner = {
+        name : req.body.name
+    };
 
-    MongoClient.connect(config.database, function(err, db) {
+    if(req.body.location) planner.location = req.body.location;
+    if(req.body.gender) planner.gender = req.body.gender;
+    if(req.body.birth_date) planner.birth_date = req.body.birth_date;
+    if(req.body.role) planner.role = req.body.role;
+    if(req.body.image) planner.image = req.body.image;
 
-        if(err){
+    cond = {_id:req.params.email};
+    update = {$set:planner};
+    db.collection(keys.PLANNER).updateOne(cond,update,function(err,result){
 
-            console.log(JSON.stringify(err.message).red);
-            return res.status(503).send(err);
-        }
+        if(err) return handleError(err,500,res);
 
-        var element = {};
-
-        if(body.name) element.name = body.name;
-
-        if(body.location) element.location = body.location;
-
-        if(body.gender) element.gender = body.gender;
-
-        if(body.birth_date) element.birth_date = body.birth_date;
-
-        if(body.categories) element.categories = body.categories;
-
-        if(body.role) element.role = body.role;
-
-        if(body.image) element.image = body.image;
-
-        var cond = {'_id':req.params.email};
-
-        console.log(element);
-        console.log(cond);
-
-        db.collection(keys.PLANNER).updateOne(cond,
-            {
-                '$set': element
-            },
-            function(err,result){
-
-                if(err){
-                    console.log(JSON.stringify(err.message).red);
-                    return res.status(406).send(err);
-                }
-
-                result = {
-                    'name':'ok',
-                    'message':result
-                };
-
-                console.log(JSON.stringify(result).green);
-                res.send(result);
-
-                db.close();
-            });
+        res.send({'message':update});
     });
 });
 
@@ -1065,7 +1032,8 @@ apiRoutes.post('/planner/sendmessage/:event', function(req,res) {
         var users = result.user_participations,
             cond = {'_id': { '$in' : users}},
             proj = {_id:0,gcm_token:1},
-            title = result.title;
+            title = result.title,
+            author = result.author;
         db.collection(keys.USER).find(cond,proj).toArray(function(err,result) {
 
             if(err) return handleError(err,500,res);
@@ -1081,7 +1049,8 @@ apiRoutes.post('/planner/sendmessage/:event', function(req,res) {
             var message = new gcm.Message({
                 data: {
                     title : 'Notifica da : ' + title,
-                    message: text
+                    message: text,
+                    author: author
                 }
             });
 
